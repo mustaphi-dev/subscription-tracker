@@ -11,6 +11,8 @@ import 'data.dart';
 import 'ui.dart';
 import 'home.dart';
 import 'lock.dart';
+import 'onboarding.dart';
+import 'profile.dart';
 import 'push.dart';
 import 'screens.dart';
 
@@ -23,6 +25,7 @@ Future<void> main() async {
         defaultValue: 'sb_publishable_MQvdhrt01UD9No8F5mo9HA_puUTELEP'),
   );
   await HomeWidget.setAppGroupId('group.com.lovefist.subtracker');
+  await loadOnboarded();
   runApp(const ProviderScope(child: App()));
 }
 
@@ -39,16 +42,23 @@ class _AuthRefresh extends ChangeNotifier {
 }
 
 final router = GoRouter(
-  refreshListenable: _AuthRefresh(),
+  refreshListenable: Listenable.merge([_AuthRefresh(), onboarded]),
   redirect: (_, s) {
     final signedIn = db.auth.currentSession != null;
-    if (!signedIn) return s.matchedLocation == '/signin' ? null : '/signin';
-    if (s.matchedLocation == '/signin') return '/';
+    final at = s.matchedLocation;
+    if (!signedIn) {
+      // First launch: welcome pages, then sign-in. Signed-in users never see onboarding.
+      if (!onboarded.value) return at == '/welcome' ? null : '/welcome';
+      return at == '/signin' ? null : '/signin';
+    }
+    if (at == '/signin' || at == '/welcome') return '/';
     return null;
   },
   routes: [
     GoRoute(path: '/', builder: (_, _) => const ShellScreen()),
+    GoRoute(path: '/welcome', builder: (_, _) => const OnboardingScreen()),
     GoRoute(path: '/signin', builder: (_, _) => const SignInScreen()),
+    GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),
     GoRoute(path: '/confirm/:id', builder: (_, s) => ConfirmTrialScreen(s.pathParameters['id']!)),
   ],
 );
@@ -68,6 +78,8 @@ class _AppState extends ConsumerState<App> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     PinStore.hasPin().then((v) => setState(() => _hasPin = v));
+    // Anyone already signed in has effectively onboarded; don't show it after a later sign-out.
+    if (db.auth.currentSession != null && !onboarded.value) finishOnboarding();
     initPush(router);
     // Bank OAuth returns to subtracker://bank-connected.
     _links = AppLinks().uriLinkStream.listen((uri) {
@@ -121,6 +133,7 @@ class _AppState extends ConsumerState<App> with WidgetsBindingObserver {
             ),
           ),
         if (obscured) const Positioned.fill(child: PrivacyShield()),
+        const Positioned.fill(child: SplashOverlay()),
       ]),
     );
   }

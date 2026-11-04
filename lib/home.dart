@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'dart:math';
+import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
@@ -22,16 +24,29 @@ class _Tab extends Notifier<int> {
 
 final tabProvider = NotifierProvider<_Tab, int>(_Tab.new);
 
+/// True once the current tab is scrolled away from the top: the bottom bar shrinks and drops its labels.
+class _Compact extends Notifier<bool> {
+  @override
+  bool build() => false;
+  void set(bool v) {
+    if (v != state) state = v;
+  }
+}
+
+final navCompactProvider = NotifierProvider<_Compact, bool>(_Compact.new);
+
 class ShellScreen extends ConsumerWidget {
   const ShellScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tab = ref.watch(tabProvider);
-    final provider = sourceFilters[ref.watch(sourceFilterProvider)];
+    final compact = ref.watch(navCompactProvider);
+    final focused = ref.watch(sourceFilterProvider);
+    final accent = (ref.watch(sourcesProvider).value ?? []).where((s) => s.id == focused).firstOrNull?.color;
     return Scaffold(
       body: Ambient(
-        color: providerColors[provider] ?? kAccent,
+        color: accent ?? kAccent,
         child: Stack(children: [
           IndexedStack(
             index: tab,
@@ -45,17 +60,42 @@ class ShellScreen extends ConsumerWidget {
             child: SafeArea(
               top: false,
               minimum: const EdgeInsets.only(bottom: 12),
-              child: Row(children: [
-                Expanded(child: _TabBar(tab: tab, onTap: ref.read(tabProvider.notifier).set)),
-                const SizedBox(width: 12),
-                Pressable(
-                  onTap: () => showAddSheet(context),
-                  child: const Glass(
-                    oval: true,
-                    child: SizedBox.square(dimension: 64, child: Icon(Icons.add_rounded, size: 30, semanticLabel: 'Add')),
-                  ),
-                ),
-              ]),
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(end: compact ? 1 : 0),
+                duration: const Duration(milliseconds: 380),
+                curve: Curves.easeOutCubic,
+                builder: (_, c, _) => LayoutBuilder(builder: (_, box) {
+                  final h = lerpDouble(64, 48, c)!;
+                  // Full width when open; trims to 80% when compact so icons keep comfortable tap targets.
+                  final full = box.maxWidth - 12 - h;
+                  final w = lerpDouble(full, full * 0.8, c)!;
+                  return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    SizedBox(
+                      width: w,
+                      child: _TabBar(
+                        tab: tab,
+                        height: h,
+                        labels: 1 - c,
+                        onTap: (i) {
+                          ref.read(navCompactProvider.notifier).set(false);
+                          ref.read(tabProvider.notifier).set(i);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Pressable(
+                      onTap: () => showAddSheet(context),
+                      child: Glass(
+                        oval: true,
+                        child: SizedBox.square(
+                          dimension: h,
+                          child: Icon(Icons.add_rounded, size: lerpDouble(30, 26, c), semanticLabel: 'Add'),
+                        ),
+                      ),
+                    ),
+                  ]);
+                }),
+              ),
             ),
           ),
         ]),
@@ -65,9 +105,13 @@ class ShellScreen extends ConsumerWidget {
 }
 
 class _TabBar extends StatelessWidget {
-  const _TabBar({required this.tab, required this.onTap});
+  const _TabBar({required this.tab, required this.onTap, required this.height, required this.labels});
   final int tab;
   final ValueChanged<int> onTap;
+  final double height;
+
+  /// 1 = labels fully shown, 0 = icons only.
+  final double labels;
 
   static const _items = [
     (Icons.home_rounded, 'Home'),
@@ -78,9 +122,9 @@ class _TabBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Glass(
-        radius: 32,
+        radius: height / 2,
         child: SizedBox(
-          height: 64,
+          height: height,
           child: LayoutBuilder(builder: (_, c) {
             final w = (c.maxWidth - 12) / _items.length;
             return Stack(children: [
@@ -92,7 +136,7 @@ class _TabBar extends StatelessWidget {
                 bottom: 6,
                 width: w,
                 child: DecoratedBox(
-                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(26)),
+                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(height / 2 - 6)),
                 ),
               ),
               Padding(
@@ -112,9 +156,21 @@ class _TabBar extends StatelessWidget {
                           },
                           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                             Icon(_items[i].$1, size: 22, color: i == tab ? kText : kMuted),
-                            const SizedBox(height: 2),
-                            Text(_items[i].$2,
-                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: i == tab ? kText : kMuted)),
+                            // Collapses its own height as well as fading, so the icon re-centres.
+                            ClipRect(
+                              child: Align(
+                                alignment: Alignment.topCenter,
+                                heightFactor: labels,
+                                child: Opacity(
+                                  opacity: labels,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Text(_items[i].$2,
+                                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: i == tab ? kText : kMuted)),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ]),
                         ),
                       ),
@@ -143,11 +199,10 @@ class TopBar extends ConsumerWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: const BoxDecoration(shape: BoxShape.circle, gradient: LinearGradient(colors: [kAccent, Color(0xFF3D7BFF)])),
-              child: const Icon(Icons.person_rounded, size: 20),
+            Semantics(
+              button: true,
+              label: 'Profile and settings',
+              child: Pressable(onTap: () => context.push('/profile'), child: const ProfileAvatar(size: 36)),
             ),
             const SizedBox(width: 10),
             AnimatedOpacity(
@@ -156,66 +211,84 @@ class TopBar extends ConsumerWidget {
               child: Text(title ?? '', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
             ),
             const Spacer(),
-            PopupMenuButton<String>(
-              initialValue: base,
-              color: kSurfaceHi,
-              tooltip: 'Base currency',
-              onSelected: setBaseCurrency,
-              itemBuilder: (_) => [for (final c in ['GBP', 'USD', 'EUR', 'GHS']) PopupMenuItem(value: c, child: Text(c))],
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(16)),
-                child: Row(children: [
-                  Text(base, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                  const Icon(Icons.expand_more_rounded, size: 16, color: kMuted),
-                ]),
+            CurrencyPill(current: base, onChanged: setBaseCurrency),
+            const SizedBox(width: 4),
+            Semantics(
+              button: true,
+              label: 'Upcoming',
+              child: Pressable(
+                onTap: () => showSheet(context, const AlertsSheet()),
+                child: const Padding(padding: EdgeInsets.all(8), child: Icon(Icons.notifications_none_rounded)),
               ),
-            ),
-            IconButton(
-              tooltip: 'Upcoming',
-              icon: const Icon(Icons.notifications_none_rounded),
-              onPressed: () => showSheet(context, const AlertsSheet()),
             ),
           ]),
         ),
       ),
     );
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 250),
-      child: scrolled
-          ? Glass(key: const ValueKey('glass'), radius: 0, tint: const Color(0x9907080C), child: bar)
-          : KeyedSubtree(key: const ValueKey('flat'), child: bar),
-    );
+    // A background-coloured scrim that fades out past the bar, so there's no visible edge or "section".
+    return Stack(clipBehavior: Clip.none, children: [
+      Positioned(
+        left: 0,
+        right: 0,
+        top: 0,
+        bottom: -36,
+        child: IgnorePointer(
+          child: AnimatedOpacity(
+            opacity: scrolled ? 1 : 0,
+            duration: const Duration(milliseconds: 250),
+            child: const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  stops: [0, 0.55, 1],
+                  colors: [kBg, Color(0xE607080C), Color(0x0007080C)],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      bar,
+    ]);
   }
 }
 
 /// Scroll page with a pinned [TopBar] whose glass appears on scroll.
-class TabPage extends StatefulWidget {
-  const TabPage({super.key, required this.slivers, this.title, this.onRefresh});
+class TabPage extends ConsumerStatefulWidget {
+  const TabPage({super.key, required this.slivers, this.title, this.onRefresh, this.padTop = true, this.padBottom = true});
   final List<Widget> slivers;
   final String? title;
   final Future<void> Function()? onRefresh;
+
+  /// False when the first sliver is a pinned header that reserves the top-bar space itself.
+  final bool padTop;
+
+  /// False when the last sliver already runs to the bottom of the screen (e.g. a sheet).
+  final bool padBottom;
   @override
-  State<TabPage> createState() => _TabPageState();
+  ConsumerState<TabPage> createState() => _TabPageState();
 }
 
-class _TabPageState extends State<TabPage> {
+class _TabPageState extends ConsumerState<TabPage> {
   bool _scrolled = false;
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.of(context).padding.top + 56;
     Widget scroll = NotificationListener<ScrollNotification>(
       onNotification: (n) {
-        final s = n.metrics.pixels > 4;
-        if (s != _scrolled) setState(() => _scrolled = s);
+        if (n.depth != 0) return false; // ignore the horizontal strips inside the page
+        final px = n.metrics.pixels;
+        if ((px > 4) != _scrolled) setState(() => _scrolled = px > 4);
+        ref.read(navCompactProvider.notifier).set(px > 60);
         return false;
       },
       child: CustomScrollView(
         physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
         slivers: [
-          SliverToBoxAdapter(child: SizedBox(height: top)),
+          if (widget.padTop) SliverToBoxAdapter(child: SizedBox(height: top)),
           ...widget.slivers,
-          const SliverToBoxAdapter(child: SizedBox(height: 140)),
+          if (widget.padBottom) const SliverToBoxAdapter(child: SizedBox(height: 140)),
         ],
       ),
     );
@@ -265,9 +338,8 @@ class DashboardTab extends ConsumerWidget {
             out: out,
           ),
         ),
-        const SliverToBoxAdapter(child: _QuickActions()),
         const SliverToBoxAdapter(child: ShortfallAlerts()),
-        if (sources.isNotEmpty) const SliverToBoxAdapter(child: AccountStrip()),
+        const SliverToBoxAdapter(child: AccountStrip()),
         if (all.isNotEmpty) SliverToBoxAdapter(child: _NextDays(items: items, base: base)),
         if (trials.isNotEmpty) SliverToBoxAdapter(child: _TrialRings(trials, base)),
         if (all.isEmpty) const SliverToBoxAdapter(child: _EmptyState()) else ..._upcoming(ref, items),
@@ -371,35 +443,6 @@ class _Pill extends StatelessWidget {
       );
 }
 
-class _QuickActions extends ConsumerWidget {
-  const _QuickActions();
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    Widget action(IconData icon, String text, VoidCallback onTap) => Pressable(
-          onTap: onTap,
-          child: Column(children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(color: kSurfaceHi, shape: BoxShape.circle, border: Border.all(color: kLine)),
-              child: Icon(icon, size: 24),
-            ),
-            const SizedBox(height: 8),
-            Text(text, style: const TextStyle(fontSize: 12, color: kMuted, fontWeight: FontWeight.w500)),
-          ]),
-        );
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 4),
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        action(Icons.add_rounded, 'Add', () => showSheet(context, const ManualItemForm())),
-        action(Icons.document_scanner_outlined, 'Scan', () => scanReceipt(context)),
-        action(Icons.link_rounded, 'Connect', () => ref.read(tabProvider.notifier).set(2)),
-        action(Icons.donut_large_rounded, 'Insights', () => ref.read(tabProvider.notifier).set(3)),
-      ]),
-    );
-  }
-}
-
 class _Dismissed extends Notifier<Set<String>> {
   @override
   Set<String> build() => {};
@@ -414,6 +457,7 @@ class ShortfallAlerts extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final hidden = ref.watch(_dismissedShortfalls);
     final list = (ref.watch(shortfallProvider).value ?? []).where((s) => !hidden.contains(s.sourceId));
+    final banks = {for (final a in ref.watch(sourcesProvider).value ?? <PaymentSource>[]) a.id: a.bank};
     final base = ref.watch(baseCurrencyProvider).value ?? 'GBP';
     return Column(children: [
       for (final s in list)
@@ -428,7 +472,7 @@ class ShortfallAlerts extends ConsumerWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Top up ${providerLabels[s.provider]} by ${money(s.shortfall, base)}',
+                  Text('Top up ${banks[s.sourceId] ?? 'account'} by ${money(s.shortfall, base)}',
                       style: const TextStyle(fontWeight: FontWeight.w700, fontFeatures: tabular)),
                   const SizedBox(height: 4),
                   Text(
@@ -451,16 +495,18 @@ class ShortfallAlerts extends ConsumerWidget {
   }
 }
 
-/// Account cards double as the source filter: tap to focus, tap again to clear.
+/// Account cards double as the source filter: tap to focus, tap again to clear, long-press to edit.
+/// Adding accounts lives only on the Accounts tab.
 class AccountStrip extends ConsumerWidget {
   const AccountStrip({super.key});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sources = ref.watch(sourcesProvider).value ?? [];
     final base = ref.watch(baseCurrencyProvider).value ?? 'GBP';
-    final selected = sourceFilters[ref.watch(sourceFilterProvider)];
+    final selected = ref.watch(sourceFilterProvider);
+    if (sources.isEmpty) return const SizedBox.shrink();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      SectionHeader('Accounts', trailing: selected == null ? null : _ClearFilter(onTap: () => ref.read(sourceFilterProvider.notifier).set(0))),
+      SectionHeader('Accounts', trailing: selected == null ? null : _ClearFilter(onTap: () => ref.read(sourceFilterProvider.notifier).set(null))),
       SizedBox(
         height: 112,
         child: ListView.separated(
@@ -471,40 +517,46 @@ class AccountStrip extends ConsumerWidget {
           separatorBuilder: (_, _) => const SizedBox(width: 10),
           itemBuilder: (_, i) {
             final s = sources[i];
-            final c = providerColors[s.provider] ?? kAccent;
-            final on = selected == s.provider;
-            return Pressable(
-              onTap: () => ref.read(sourceFilterProvider.notifier).set(on ? 0 : sourceFilters.indexOf(s.provider)),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                width: 168,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: on ? c : kLine, width: on ? 1.5 : 1),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color.alphaBlend(c.withValues(alpha: 0.22), kSurface), kSurface],
+            final c = s.color;
+            final on = selected == s.id;
+            return GestureDetector(
+              onLongPress: () {
+                HapticFeedback.mediumImpact();
+                showSheet(context, AccountForm(account: s));
+              },
+              child: Pressable(
+                onTap: () => ref.read(sourceFilterProvider.notifier).set(on ? null : s.id),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  width: 168,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: on ? c : kLine, width: on ? 1.5 : 1),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color.alphaBlend(c.withValues(alpha: 0.22), kSurface), kSurface],
+                    ),
                   ),
-                ),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [
-                    Container(width: 8, height: 8, decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
-                    const SizedBox(width: 6),
-                    Text(providerLabels[s.provider]!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      Container(width: 8, height: 8, decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
+                      const SizedBox(width: 6),
+                      Flexible(child: Text(s.bank, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+                      const SizedBox(width: 6),
+                      Text(s.currency, style: caption),
+                    ]),
                     const Spacer(),
-                    Text(s.currency, style: caption),
+                    FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(money(s.balance, s.currency), style: display(20))),
+                    Text(
+                      s.currency != base && s.baseBalance != null ? '≈ ${money(s.baseBalance!, base)}' : s.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: caption,
+                    ),
                   ]),
-                  const Spacer(),
-                  Text(money(s.balance, s.currency), style: display(20)),
-                  Text(
-                    s.currency != base && s.baseBalance != null ? '≈ ${money(s.baseBalance!, base)}' : s.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: caption,
-                  ),
-                ]),
+                ),
               ),
             );
           },
@@ -512,6 +564,37 @@ class AccountStrip extends ConsumerWidget {
       ),
     ]);
   }
+}
+
+/// Dashed-outline placeholder card ("add" affordance).
+class DottedCard extends StatelessWidget {
+  const DottedCard({super.key, required this.child, this.width});
+  final Widget child;
+  final double? width;
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+        painter: _Dashes(),
+        child: SizedBox(width: width, height: double.infinity, child: child),
+      );
+}
+
+class _Dashes extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()..addRRect(RRect.fromRectAndRadius((Offset.zero & size).deflate(0.5), const Radius.circular(20)));
+    final p = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2
+      ..color = kFaint;
+    for (final m in path.computeMetrics()) {
+      for (var d = 0.0; d < m.length; d += 9) {
+        canvas.drawPath(m.extractPath(d, d + 5), p);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_Dashes old) => false;
 }
 
 class _ClearFilter extends StatelessWidget {
@@ -535,7 +618,7 @@ class _NextDays extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sources = {for (final s in ref.watch(sourcesProvider).value ?? <PaymentSource>[]) s.id: s.provider};
+    final sources = {for (final s in ref.watch(sourcesProvider).value ?? <PaymentSource>[]) s.id: s.color};
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final charges = chargesBetween(items, today, today.add(const Duration(days: 14)));
@@ -584,7 +667,7 @@ class _NextDays extends ConsumerWidget {
                           margin: const EdgeInsets.symmetric(horizontal: 1),
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: c.amount > 0 ? kMint : (providerColors[sources[c.item.sourceId]] ?? kAccent),
+                            color: c.amount > 0 ? kMint : (sources[c.item.sourceId] ?? kAccent),
                           ),
                         ),
                     ]),
@@ -639,25 +722,37 @@ class _TrialRings extends StatelessWidget {
               final t = trials[i];
               final left = t.trialEnd!.difference(DateTime.now());
               final urgent = left.inHours < 48;
+              final tone = urgent ? kCrimson : kAccent;
+              final known = t.postTrialAmount != null;
               return Surface(
                 onTap: () => showSheet(context, DaySheet(day: t.trialEnd!, items: [t])),
                 padding: const EdgeInsets.all(16),
+                border: urgent ? kCrimson.withValues(alpha: 0.35) : null,
                 child: SizedBox(
-                  width: 132,
+                  width: 168,
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    _Ring(
-                      progress: t.trialProgress,
-                      color: urgent ? kCrimson : kAccent,
-                      center: Text(left.inDays > 0 ? '${left.inDays}d' : '${left.inHours}h', style: display(18)),
-                    ),
+                    Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      // Ring fills as the trial runs out, around the brand's logo.
+                      _Ring(progress: t.trialProgress, color: tone, center: MerchantAvatar(t.merchant, size: 30)),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(color: kSurfaceHi, borderRadius: BorderRadius.circular(99)),
+                        child: Text('Ends ${DateFormat('d MMM').format(t.trialEnd!)}', style: const TextStyle(color: kMuted, fontSize: 11, fontWeight: FontWeight.w600)),
+                      ),
+                    ]),
                     const Spacer(),
-                    Text(t.merchant, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 2),
-                    Text(
-                      t.baseAmount == null || t.postTrialAmount == null ? 'Charge unknown' : 'then ${money(t.baseAmount!, base)}',
-                      style: TextStyle(color: urgent ? kCrimson : kMuted, fontSize: 12, fontFeatures: tabular),
+                    Text(t.merchant, maxLines: 1, overflow: TextOverflow.ellipsis, style: label),
+                    LiveCountdown(t.trialEnd!, style: display(20, color: urgent ? kCrimson : kText)),
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(color: (known ? tone : kMuted).withValues(alpha: 0.14), borderRadius: BorderRadius.circular(99)),
+                      child: Text(
+                        known ? 'Then ${money(t.postTrialAmount!, t.currency)}' : 'Charge unknown',
+                        style: TextStyle(color: known ? tone : kMuted, fontSize: 12, fontWeight: FontWeight.w600, fontFeatures: tabular),
+                      ),
                     ),
-                    LiveCountdown(t.trialEnd!, style: caption),
                   ]),
                 ),
               );
@@ -678,7 +773,7 @@ class _Ring extends StatelessWidget {
         duration: const Duration(milliseconds: 1100),
         curve: springOut,
         builder: (_, v, child) => CustomPaint(painter: _RingPainter(v, color), child: child),
-        child: SizedBox.square(dimension: 64, child: Center(child: center)),
+        child: SizedBox.square(dimension: 52, child: Center(child: center)),
       );
 }
 

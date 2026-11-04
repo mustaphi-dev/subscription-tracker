@@ -71,7 +71,7 @@ class _ItemRowState extends ConsumerState<ItemRow> {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(children: [
-          MerchantAvatar(i.merchant, provider: source?.provider),
+          MerchantAvatar(i.merchant, dot: source?.color),
           const SizedBox(width: 14),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -114,7 +114,7 @@ class _ItemRowState extends ConsumerState<ItemRow> {
       confirmDismiss: (_) async {
         HapticFeedback.mediumImpact();
         await setItemStatus(i.id, 'cancelled');
-        if (context.mounted) showToast(context, '${i.merchant} marked as cancelled');
+        if (context.mounted) showToast(context, '${i.merchant} marked as cancelled', closeSheets: false); // row is still animating out
         return true;
       },
       child: AnimatedSize(
@@ -143,8 +143,9 @@ class _ItemRowState extends ConsumerState<ItemRow> {
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(children: [
           Text(k, style: const TextStyle(color: kMuted, fontSize: 13)),
-          const Spacer(),
-          Flexible(child: Text(v, textAlign: TextAlign.right, style: const TextStyle(fontSize: 13, fontFeatures: tabular))),
+          const SizedBox(width: 16),
+          // Expanded (not Spacer + Flexible, which split the row and started values mid-way).
+          Expanded(child: Text(v, textAlign: TextAlign.right, style: const TextStyle(fontSize: 13, fontFeatures: tabular))),
         ]),
       );
 
@@ -184,7 +185,7 @@ class _ItemRowState extends ConsumerState<ItemRow> {
   Widget _trial(FinancialItem i, String base, PaymentSource? s) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         if (i.trialEnd != null) _kvWidget('Converts in', LiveCountdown(i.trialEnd!, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13))),
         _kv('Charged after trial', i.postTrialAmount == null ? 'Unknown' : dualMoney(i.postTrialAmount!, i.currency, i.baseAmount, base)),
-        _kv('Paid from', s == null ? 'Not assigned' : '${providerLabels[s.provider]} · ${s.name}'),
+        _kv('Paid from', s == null ? 'Not assigned' : '${s.bank} · ${s.name}'),
         const SizedBox(height: 12),
         Row(children: [
           Expanded(child: OutlinedButton(onPressed: () => _openCancel(i, s), child: Text(i.cancelUrl == null ? 'Open bank app' : 'Cancel at merchant'))),
@@ -213,7 +214,7 @@ class _ItemRowState extends ConsumerState<ItemRow> {
         _kv('Type', _typeLabel[i.type] ?? i.type),
         _kv('Frequency', _cycleLabel[i.cycle] ?? i.cycle),
         if (i.type != 'income') _kv('Total spent so far', money(i.totalSpent, i.currency)),
-        _kv(i.type == 'income' ? 'Paid into' : 'Paid from', s == null ? 'Not assigned' : '${providerLabels[s.provider]} · ${s.name}'),
+        _kv(i.type == 'income' ? 'Paid into' : 'Paid from', s == null ? 'Not assigned' : '${s.bank} · ${s.name}'),
         _kv('Added via', switch (i.detectedVia) { 'open_banking' => 'Open Banking', 'email_ai' => 'Receipt scan', _ => 'Manual' }),
       ]);
 
@@ -243,14 +244,18 @@ class _Tag extends StatelessWidget {
 
 /// Rows grouped in one solid surface with hairline dividers.
 class ItemGroup extends StatelessWidget {
-  const ItemGroup(this.items, {super.key});
+  const ItemGroup(this.items, {super.key, this.color = kSurface});
   final List<FinancialItem> items;
+
+  /// Raise to kSurfaceHi when the group sits on a kSurface sheet.
+  final Color color;
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(22),
           child: Surface(
+            color: color,
             padding: EdgeInsets.zero,
             child: Column(children: [
               for (var k = 0; k < items.length; k++) ...[

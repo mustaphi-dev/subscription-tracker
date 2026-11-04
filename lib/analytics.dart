@@ -319,17 +319,17 @@ class _BreakdownState extends State<_Breakdown> {
 
   @override
   Widget build(BuildContext context) {
-    final providers = {for (final s in widget.sources) s.id: s.provider};
+    final accounts = {for (final s in widget.sources) s.id: s};
     final byAccount = _byAccount == 1;
     final groups = <String, double>{};
     for (final i in widget.items) {
-      final k = byAccount ? (providers[i.sourceId] ?? 'none') : i.type;
+      final k = byAccount ? (accounts.containsKey(i.sourceId) ? i.sourceId! : 'none') : i.type;
       groups[k] = (groups[k] ?? 0) + i.monthlyBase;
     }
     final entries = groups.entries.where((e) => e.value > 0).toList()..sort((a, b) => b.value.compareTo(a.value));
     final total = entries.fold(0.0, (s, e) => s + e.value);
-    Color colorOf(String k) => (byAccount ? providerColors[k] : _typeColors[k]) ?? kFaint;
-    String nameOf(String k) => (byAccount ? providerLabels[k] : _typeNames[k]) ?? 'Not assigned';
+    Color colorOf(String k) => (byAccount ? accounts[k]?.color : _typeColors[k]) ?? kFaint;
+    String nameOf(String k) => (byAccount ? accounts[k]?.bank : _typeNames[k]) ?? 'Not assigned';
     final focus = _touched != null && _touched! < entries.length ? entries[_touched!] : null;
 
     return _Card(

@@ -113,9 +113,15 @@ class AppLogo extends StatelessWidget {
 
 /// Full-screen Face ID + 6-digit glass PIN gate. [setup] = create a PIN first.
 class LiquidGlassLockScreen extends ConsumerStatefulWidget {
-  const LiquidGlassLockScreen({super.key, this.setup = false, this.onDone});
+  const LiquidGlassLockScreen({super.key, this.setup = false, this.onDone, this.onCancel, this.title});
   final bool setup;
   final VoidCallback? onDone;
+
+  /// Overrides the unlock-mode heading.
+  final String? title;
+
+  /// Shows a close button when set. Leave null for the app lock itself, which must not be skippable.
+  final VoidCallback? onCancel;
   @override
   ConsumerState<LiquidGlassLockScreen> createState() => _LockState();
 }
@@ -204,12 +210,18 @@ class _LockState extends ConsumerState<LiquidGlassLockScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final title = widget.setup ? (_firstPin == null ? 'Create a 6-digit PIN' : 'Confirm your PIN') : 'Enter PIN';
+    final title = widget.setup ? (_firstPin == null ? 'Create a 6-digit PIN' : 'Confirm your PIN') : widget.title ?? 'Enter PIN';
     return Material(
       color: Colors.transparent,
       child: Ambient(
         child: SafeArea(
           child: Column(children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: widget.onCancel == null
+                  ? const SizedBox(height: 48)
+                  : IconButton(tooltip: 'Cancel', icon: const Icon(Icons.close_rounded), onPressed: widget.onCancel),
+            ),
             const Spacer(),
             const AppLogo(),
             const SizedBox(height: 24),

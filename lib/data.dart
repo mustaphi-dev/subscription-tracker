@@ -16,8 +16,12 @@ class PaymentSource {
         balance = _d(m['current_balance']) ?? 0,
         currency = m['currency'],
         baseBalance = _d(m['gbp_equivalent_balance']),
-        lastSynced = _date(m['last_synced_at']);
+        lastSynced = _date(m['last_synced_at']),
+        institution = m['institution'],
+        isManual = m['is_manual'] ?? false;
   final String id, provider, name, currency;
+  final String? institution;
+  final bool isManual;
   final double balance;
   final double? baseBalance;
   final DateTime? lastSynced;
@@ -176,19 +180,24 @@ class _Pick extends Notifier<int> {
   void set(int i) => state = i;
 }
 
-const sourceFilters = [null, 'revolut', 'wise', 'lloyds', 'paypal'];
+/// Selected account id (null = all accounts).
+class _SourcePick extends Notifier<String?> {
+  @override
+  String? build() => null;
+  void set(String? id) => state = id;
+}
+
 const typeFilters = [null, 'free_trial', 'subscription', 'installment', 'income'];
-final sourceFilterProvider = NotifierProvider<_Pick, int>(_Pick.new);
+final sourceFilterProvider = NotifierProvider<_SourcePick, String?>(_SourcePick.new);
 final typeFilterProvider = NotifierProvider<_Pick, int>(_Pick.new);
 
 final filteredItemsProvider = Provider<List<FinancialItem>>((ref) {
   final items = ref.watch(itemsProvider).value ?? [];
-  final sources = {for (final s in ref.watch(sourcesProvider).value ?? <PaymentSource>[]) s.id: s.provider};
-  final p = sourceFilters[ref.watch(sourceFilterProvider)];
+  final source = ref.watch(sourceFilterProvider);
   final t = typeFilters[ref.watch(typeFilterProvider)];
   return items
       .where((i) => i.status == 'active' || i.status == 'pending_confirmation')
-      .where((i) => p == null || sources[i.sourceId] == p)
+      .where((i) => source == null || i.sourceId == source)
       .where((i) => t == null || i.type == t)
       .toList();
 });
@@ -202,6 +211,25 @@ Future<void> setBaseCurrency(String ccy) =>
     db.from('profiles').update({'global_base_currency': ccy}).eq('id', db.auth.currentUser!.id);
 
 Future<void> addItem(Map<String, dynamic> row) => db.from('financial_items').insert(row);
+
+const knownBanks = {'revolut', 'wise', 'lloyds', 'paypal'};
+
+/// Manual account for any bank. Known names map onto their provider so they get its colour and filter.
+Future<void> saveAccount({String? id, required String bank, required String name, required String currency, required double balance}) {
+  final key = bank.trim().toLowerCase();
+  final row = {
+    'provider': knownBanks.contains(key) ? key : 'other',
+    'institution': bank.trim(),
+    'account_name': name.trim().isEmpty ? bank.trim() : name.trim(),
+    'currency': currency,
+    'current_balance': balance,
+    'is_manual': true,
+    'last_synced_at': DateTime.now().toUtc().toIso8601String(),
+  };
+  return id == null ? db.from('payment_sources').insert(row) : db.from('payment_sources').update(row).eq('id', id);
+}
+
+Future<void> deleteAccount(String id) => db.from('payment_sources').delete().eq('id', id);
 
 Future<String> connectBank(String provider) async {
   final res = await db.functions.invoke('bank-sync/connect', body: {'provider': provider});
