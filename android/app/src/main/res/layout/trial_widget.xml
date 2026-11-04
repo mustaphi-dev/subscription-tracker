@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:padding="14dp" android:background="@drawable/glass_bg">
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="Expiring trials" android:textColor="#99FFFFFF" android:textSize="12sp" />
+    <TextView android:id="@+id/empty" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:paddingTop="8dp" android:text="No trials ending soon" android:textColor="#FFFFFF" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:paddingTop="6dp">
+        <TextView android:id="@+id/name0" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:textColor="#FFFFFF" android:textStyle="bold" android:maxLines="1" android:ellipsize="end" />
+        <Chronometer android:id="@+id/timer0" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FF4D5E" android:fontFeatureSettings="tnum" />
+    </LinearLayout>
+    <TextView android:id="@+id/charge0" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#99FFFFFF" android:textSize="11sp" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:paddingTop="6dp">
+        <TextView android:id="@+id/name1" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:textColor="#FFFFFF" android:textStyle="bold" android:maxLines="1" android:ellipsize="end" />
+        <Chronometer android:id="@+id/timer1" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FF4D5E" android:fontFeatureSettings="tnum" />
+    </LinearLayout>
+    <TextView android:id="@+id/charge1" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#99FFFFFF" android:textSize="11sp" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:paddingTop="6dp">
+        <TextView android:id="@+id/name2" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:textColor="#FFFFFF" android:textStyle="bold" android:maxLines="1" android:ellipsize="end" />
+        <Chronometer android:id="@+id/timer2" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FF4D5E" android:fontFeatureSettings="tnum" />
+    </LinearLayout>
+    <TextView android:id="@+id/charge2" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#99FFFFFF" android:textSize="11sp" />
+</LinearLayout>

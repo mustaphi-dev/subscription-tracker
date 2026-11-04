@@ -1,0 +1,223 @@
+import 'dart:async';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+SupabaseClient get db => Supabase.instance.client;
+
+double? _d(Object? v) => v == null ? null : (v as num).toDouble();
+DateTime? _date(Object? v) => v == null ? null : DateTime.parse(v as String).toLocal();
+
+class PaymentSource {
+  PaymentSource(Map<String, dynamic> m)
+      : id = m['id'],
+        provider = m['provider'],
+        name = m['account_name'],
+        balance = _d(m['current_balance']) ?? 0,
+        currency = m['currency'],
+        baseBalance = _d(m['gbp_equivalent_balance']),
+        lastSynced = _date(m['last_synced_at']);
+  final String id, provider, name, currency;
+  final double balance;
+  final double? baseBalance;
+  final DateTime? lastSynced;
+}
+
+class FinancialItem {
+  FinancialItem(Map<String, dynamic> m)
+      : id = m['id'],
+        sourceId = m['payment_source_id'],
+        type = m['item_type'],
+        merchant = m['merchant_name'],
+        amount = _d(m['original_amount']) ?? 0,
+        currency = m['original_currency'],
+        baseAmount = _d(m['gbp_equivalent_amount']),
+        postTrialAmount = _d(m['post_trial_amount']),
+        nextRenewal = _date(m['next_renewal_date']),
+        trialEnd = _date(m['trial_end_date']),
+        cycle = m['billing_cycle'],
+        installTotal = m['installment_total_count'],
+        installPaid = m['installment_paid_count'] ?? 0,
+        installRemaining = _d(m['installment_remaining_balance']),
+        cancelUrl = m['cancellation_url'],
+        status = m['status'],
+        detectedVia = m['auto_detected_via'],
+        totalSpent = _d(m['total_spent']) ?? 0,
+        createdAt = _date(m['created_at']);
+
+  final String id, type, merchant, currency, cycle, status, detectedVia;
+  final String? sourceId, cancelUrl;
+  final double amount, totalSpent;
+  final double? baseAmount, postTrialAmount, installRemaining;
+  final DateTime? nextRenewal, trialEnd, createdAt;
+  final int? installTotal;
+  final int installPaid;
+
+  bool get isTrial => type == 'free_trial';
+
+  /// When money next leaves (or arrives). Trials: the conversion moment.
+  DateTime? get dueAt => isTrial ? trialEnd : nextRenewal;
+
+  /// The amount that will actually be charged next, in original currency.
+  double get chargeAmount => isTrial ? (postTrialAmount ?? 0) : amount;
+
+  /// Normalised monthly value in base currency.
+  double get monthlyBase {
+    final b = baseAmount ?? 0;
+    return switch (cycle) { 'weekly' => b * 52 / 12, 'quarterly' => b / 3, 'yearly' => b / 12, 'once' => 0, _ => b };
+  }
+
+  /// Share of the trial already used, 0..1 (needs createdAt as the start).
+  double get trialProgress {
+    if (trialEnd == null || createdAt == null) return 0;
+    final total = trialEnd!.difference(createdAt!).inMinutes;
+    if (total <= 0) return 1;
+    return (DateTime.now().difference(createdAt!).inMinutes / total).clamp(0, 1);
+  }
+}
+
+/// One projected money movement. [amount] is in base currency; income is positive, charges negative.
+class Charge {
+  const Charge(this.item, this.date, this.amount);
+  final FinancialItem item;
+  final DateTime date;
+  final double amount;
+}
+
+DateTime _addMonths(DateTime d, int n) {
+  final first = DateTime(d.year, d.month + n, 1);
+  final lastDay = DateTime(first.year, first.month + 1, 0).day;
+  return DateTime(first.year, first.month, d.day > lastDay ? lastDay : d.day, d.hour, d.minute);
+}
+
+/// Every projected charge/income in [from, to). Trials charge from trialEnd and keep renewing,
+/// installments stop after the remaining payments.
+List<Charge> chargesBetween(Iterable<FinancialItem> items, DateTime from, DateTime to) {
+  final out = <Charge>[];
+  for (final i in items) {
+    if (i.status != 'active' && i.status != 'pending_confirmation') continue;
+    final start = i.dueAt;
+    if (start == null) continue;
+    final value = (i.baseAmount ?? i.chargeAmount) * (i.type == 'income' ? 1 : -1);
+    final remaining = i.type == 'installment' && i.installTotal != null ? i.installTotal! - i.installPaid : null;
+    for (var k = 0; remaining == null || k < remaining; k++) {
+      final d = switch (i.cycle) {
+        'weekly' => start.add(Duration(days: 7 * k)),
+        'quarterly' => _addMonths(start, 3 * k),
+        'yearly' => _addMonths(start, 12 * k),
+        'once' => k == 0 ? start : null,
+        _ => _addMonths(start, k),
+      };
+      if (d == null || !d.isBefore(to)) break;
+      if (!d.isBefore(from)) out.add(Charge(i, d, value));
+    }
+  }
+  out.sort((a, b) => a.date.compareTo(b.date));
+  return out;
+}
+
+class Shortfall {
+  Shortfall(Map<String, dynamic> m)
+      : sourceId = m['payment_source_id'],
+        provider = m['provider'],
+        due = _d(m['due_amount']) ?? 0,
+        balance = _d(m['balance']) ?? 0,
+        shortfall = _d(m['shortfall']) ?? 0,
+        days = m['days_until_first'] ?? 0;
+  final String sourceId, provider;
+  final double due, balance, shortfall;
+  final int days;
+}
+
+// ───────── Providers ─────────
+
+final authProvider = StreamProvider<AuthState>((ref) => db.auth.onAuthStateChange);
+
+final baseCurrencyProvider = StreamProvider<String>((ref) {
+  ref.watch(authProvider);
+  final uid = db.auth.currentUser?.id;
+  if (uid == null) return Stream.value('GBP');
+  return db.from('profiles').stream(primaryKey: ['id']).eq('id', uid).map(
+        (rows) => rows.isEmpty ? 'GBP' : rows.first['global_base_currency'] as String,
+      );
+});
+
+final sourcesProvider = StreamProvider<List<PaymentSource>>((ref) {
+  ref.watch(authProvider);
+  return db.from('payment_sources').stream(primaryKey: ['id']).map((r) => r.map(PaymentSource.new).toList());
+});
+
+final itemsProvider = StreamProvider<List<FinancialItem>>((ref) {
+  ref.watch(authProvider);
+  return db.from('financial_items').stream(primaryKey: ['id']).map((rows) {
+    final items = rows.map(FinancialItem.new).where((i) => i.status != 'cancelled').toList();
+    final far = DateTime(9999);
+    items.sort((a, b) => (a.dueAt ?? far).compareTo(b.dueAt ?? far));
+    return items;
+  });
+});
+
+final shortfallProvider = FutureProvider<List<Shortfall>>((ref) async {
+  // Recompute whenever balances or items change.
+  await ref.watch(sourcesProvider.future);
+  await ref.watch(itemsProvider.future);
+  final rows = await db.from('shortfall_check').select();
+  return rows.map(Shortfall.new).toList();
+});
+
+/// 1 Hz clock for live countdowns.
+final clockProvider = StreamProvider<DateTime>(
+  (ref) => Stream.periodic(const Duration(seconds: 1), (_) => DateTime.now()),
+);
+
+class _Pick extends Notifier<int> {
+  @override
+  int build() => 0;
+  void set(int i) => state = i;
+}
+
+const sourceFilters = [null, 'revolut', 'wise', 'lloyds', 'paypal'];
+const typeFilters = [null, 'free_trial', 'subscription', 'installment', 'income'];
+final sourceFilterProvider = NotifierProvider<_Pick, int>(_Pick.new);
+final typeFilterProvider = NotifierProvider<_Pick, int>(_Pick.new);
+
+final filteredItemsProvider = Provider<List<FinancialItem>>((ref) {
+  final items = ref.watch(itemsProvider).value ?? [];
+  final sources = {for (final s in ref.watch(sourcesProvider).value ?? <PaymentSource>[]) s.id: s.provider};
+  final p = sourceFilters[ref.watch(sourceFilterProvider)];
+  final t = typeFilters[ref.watch(typeFilterProvider)];
+  return items
+      .where((i) => i.status == 'active' || i.status == 'pending_confirmation')
+      .where((i) => p == null || sources[i.sourceId] == p)
+      .where((i) => t == null || i.type == t)
+      .toList();
+});
+
+// ───────── Actions ─────────
+
+Future<void> setItemStatus(String id, String status) =>
+    db.from('financial_items').update({'status': status}).eq('id', id);
+
+Future<void> setBaseCurrency(String ccy) =>
+    db.from('profiles').update({'global_base_currency': ccy}).eq('id', db.auth.currentUser!.id);
+
+Future<void> addItem(Map<String, dynamic> row) => db.from('financial_items').insert(row);
+
+Future<String> connectBank(String provider) async {
+  final res = await db.functions.invoke('bank-sync/connect', body: {'provider': provider});
+  return res.data['link'] as String;
+}
+
+Future<void> syncBanks() => db.functions.invoke('bank-sync/sync');
+
+Future<Map<String, dynamic>> parseReceipt(Map<String, dynamic> body) async =>
+    (await db.functions.invoke('parse-trial-receipt', body: body)).data as Map<String, dynamic>;
+
+/// Human-readable message from an edge-function failure.
+String functionError(Object e) {
+  if (e is FunctionException) {
+    final d = e.details;
+    return d is Map ? '${d['error'] ?? d['message'] ?? e.reasonPhrase}' : '${e.reasonPhrase ?? e.status}';
+  }
+  return '$e';
+}

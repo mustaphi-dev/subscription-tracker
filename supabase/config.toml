@@ -1,0 +1,15 @@
+project_id = "subtracker"
+
+# Browser redirect from GoCardless and Postmark inbound webhook carry no Supabase JWT.
+# Both are authenticated inside the function (nonce lookup / shared secret).
+[functions.bank-sync]
+verify_jwt = false
+
+[functions.parse-trial-receipt]
+verify_jwt = false
+
+[functions.fx-sync]
+verify_jwt = false
+
+[functions.dispatch-alerts]
+verify_jwt = false
