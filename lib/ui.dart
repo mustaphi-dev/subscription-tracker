@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -379,7 +380,7 @@ Timer? _toastTimer;
 /// Success toasts also close any open bottom sheet (the action is done); errors pass
 /// [closeSheets] false so the user can fix their input.
 void showToast(BuildContext context, String message,
-    {Color tone = kText, IconData icon = Icons.check_circle_rounded, Duration duration = const Duration(milliseconds: 2600), bool closeSheets = true}) {
+    {Color tone = kText, IconData icon = CupertinoIcons.checkmark_circle_fill, Duration duration = const Duration(milliseconds: 2600), bool closeSheets = true}) {
   _toastTimer?.cancel();
   _toast?.remove();
   final overlay = Overlay.of(context, rootOverlay: true);
@@ -439,7 +440,7 @@ void showToast(BuildContext context, String message,
 }
 
 void showError(BuildContext context, String message) =>
-    showToast(context, message, tone: kCrimson, icon: Icons.error_rounded, duration: const Duration(seconds: 4), closeSheets: false);
+    showToast(context, message, tone: kCrimson, icon: CupertinoIcons.exclamationmark_circle, duration: const Duration(seconds: 4), closeSheets: false);
 
 /// Solid bottom sheet with a grab handle.
 Future<T?> showSheet<T>(BuildContext context, Widget child) => showModalBottomSheet<T>(
@@ -500,7 +501,7 @@ Future<T?> pickFromSheet<T>(BuildContext context, {required String title, requir
                             if (sub != null) Text(sub, style: caption),
                           ]),
                         ),
-                        if (value == selected) const Icon(Icons.check_rounded, color: kMint, size: 20),
+                        if (value == selected) const Icon(CupertinoIcons.checkmark, color: kMint, size: 20),
                       ]),
                     ),
                   ),
@@ -541,7 +542,7 @@ class SelectField<T> extends StatelessWidget {
               child: Text(current ?? hint ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: current == null ? kMuted : kText)),
             ),
             const SizedBox(width: 6),
-            const Icon(Icons.unfold_more_rounded, size: 18, color: kMuted),
+            const Icon(CupertinoIcons.chevron_up_chevron_down, size: 18, color: kMuted),
           ]),
         ),
       ),
@@ -617,7 +618,7 @@ Future<String?> pickCurrency(BuildContext context, String current) => Navigator.
                         AnimatedOpacity(
                           opacity: code == current ? 1 : 0,
                           duration: const Duration(milliseconds: 150),
-                          child: const Icon(Icons.check_rounded, color: kMint, size: 20),
+                          child: const Icon(CupertinoIcons.checkmark, color: kMint, size: 20),
                         ),
                       ]),
                     ),
@@ -661,7 +662,7 @@ class CurrencyPill extends StatelessWidget {
             const SizedBox(width: 6),
             Text(current, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
             const SizedBox(width: 2),
-            const Icon(Icons.unfold_more_rounded, size: 16, color: kMuted),
+            const Icon(CupertinoIcons.chevron_up_chevron_down, size: 16, color: kMuted),
           ]),
         ),
       ),
@@ -682,7 +683,7 @@ class ProfileAvatar extends StatelessWidget {
       alignment: Alignment.center,
       decoration: const BoxDecoration(shape: BoxShape.circle, gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [kAccent, Color(0xFF3D7BFF)])),
       child: email.isEmpty
-          ? Icon(Icons.person_rounded, size: size * 0.55)
+          ? Icon(CupertinoIcons.person_fill, size: size * 0.55)
           : Text(email[0].toUpperCase(), style: display(size * 0.45, weight: FontWeight.w700)),
     );
   }

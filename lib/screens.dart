@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -242,12 +243,12 @@ class _CalendarState extends ConsumerState<TrialsCalendarTab> {
                                 ),
                                 const SizedBox(width: 8),
                                 _monthStep(
-                                  Icons.chevron_left_rounded,
+                                  CupertinoIcons.chevron_left,
                                   'Previous month',
                                   () => _pages.previousPage(duration: _step, curve: Curves.easeOutCubic),
                                 ),
                                 const SizedBox(width: 6),
-                                _monthStep(Icons.chevron_right_rounded, 'Next month', () => _pages.nextPage(duration: _step, curve: Curves.easeOutCubic)),
+                                _monthStep(CupertinoIcons.chevron_right, 'Next month', () => _pages.nextPage(duration: _step, curve: Curves.easeOutCubic)),
                               ],
                             ),
                           ),
@@ -494,7 +495,7 @@ class AccountsTab extends ConsumerWidget {
                           width: 36,
                           height: 36,
                           decoration: const BoxDecoration(color: kAccent, shape: BoxShape.circle),
-                          child: const Icon(Icons.add_rounded, color: Colors.white, size: 22),
+                          child: const Icon(CupertinoIcons.plus, color: Colors.white, size: 22),
                         ),
                       ],
                     ),
@@ -516,7 +517,7 @@ class AccountsTab extends ConsumerWidget {
                             padding: EdgeInsets.all(16),
                             child: Row(
                               children: [
-                                SizedBox.square(dimension: 40, child: Icon(Icons.add_rounded, color: kMuted)),
+                                SizedBox.square(dimension: 40, child: Icon(CupertinoIcons.plus, color: kMuted)),
                                 SizedBox(width: 14),
                                 Text(
                                   'Add account',
@@ -872,7 +873,7 @@ class InboundEmailTile extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(color: kMint.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(14)),
-              child: const Icon(Icons.alternate_email_rounded, color: kMint),
+              child: const Icon(CupertinoIcons.at, color: kMint),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -885,7 +886,7 @@ class InboundEmailTile extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(Icons.copy_rounded, size: 18, color: kFaint),
+            const Icon(CupertinoIcons.doc_on_doc, size: 18, color: kFaint),
           ],
         ),
       );
@@ -1082,7 +1083,7 @@ class ConfirmTrialScreen extends ConsumerWidget {
             children: [
               Align(
                 alignment: Alignment.centerLeft,
-                child: IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => context.go('/')),
+                child: IconButton(icon: const Icon(CupertinoIcons.xmark), onPressed: () => context.go('/')),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),

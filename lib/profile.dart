@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -54,7 +55,7 @@ class _ProfileState extends ConsumerState<ProfileScreen> {
                   if (sub != null) Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: caption),
                 ]),
               ),
-              trailing ?? (onTap == null ? const SizedBox() : const Icon(Icons.chevron_right_rounded, color: kFaint)),
+              trailing ?? (onTap == null ? const SizedBox() : const Icon(CupertinoIcons.chevron_right, color: kFaint)),
             ]),
           ),
         );
@@ -86,7 +87,7 @@ class _ProfileState extends ConsumerState<ProfileScreen> {
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(8, 0, 24, 0),
                   child: Row(children: [
-                    IconButton(tooltip: 'Back', icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20), onPressed: () => context.pop()),
+                    IconButton(tooltip: 'Back', icon: const Icon(CupertinoIcons.chevron_left, size: 20), onPressed: () => context.pop()),
                     Text('Profile', style: display(20)),
                   ]),
                 ),
@@ -126,10 +127,10 @@ class _ProfileState extends ConsumerState<ProfileScreen> {
             const SliverToBoxAdapter(child: SectionHeader('General')),
             SliverToBoxAdapter(
               child: group([
-                row(Icons.currency_exchange_rounded, 'Display currency',
+                row(CupertinoIcons.arrow_right_arrow_left_circle, 'Display currency',
                     sub: currencies.where((c) => c.$1 == base).firstOrNull?.$3 ?? base,
                     trailing: CurrencyPill(current: base, onChanged: setBaseCurrency)),
-                row(Icons.account_balance_rounded, 'Manage accounts', sub: '${sources.length} connected or manual', onTap: () {
+                row(CupertinoIcons.creditcard, 'Manage accounts', sub: '${sources.length} connected or manual', onTap: () {
                   ref.read(tabProvider.notifier).set(2);
                   context.pop();
                 }),
@@ -138,7 +139,7 @@ class _ProfileState extends ConsumerState<ProfileScreen> {
             const SliverToBoxAdapter(child: SectionHeader('Security')),
             SliverToBoxAdapter(
               child: group(footer: 'The app locks ${lockTimeout.inSeconds} seconds after you leave it.', [
-                row(Icons.face_unlock_rounded, 'Unlock with Face ID',
+                row(CupertinoIcons.viewfinder, 'Unlock with Face ID',
                     sub: 'Unlock the app by looking at your phone',
                     trailing: Switch(
                       value: _bio ?? true,
@@ -149,7 +150,7 @@ class _ProfileState extends ConsumerState<ProfileScreen> {
                         await db.from('profiles').update({'biometric_enabled': v}).eq('id', user!.id);
                       },
                     )),
-                row(Icons.pin_rounded, 'Change PIN', sub: 'The 6-digit code that unlocks the app', onTap: _changePin),
+                row(CupertinoIcons.lock, 'Change PIN', sub: 'The 6-digit code that unlocks the app', onTap: _changePin),
               ]),
             ),
             const SliverToBoxAdapter(child: SectionHeader('Trial emails')),
@@ -220,7 +221,7 @@ class _ForwardingCard extends StatelessWidget {
                 child: Row(children: [
                   Expanded(child: Text(address ?? '…', maxLines: 2, style: const TextStyle(fontSize: 13, color: kText, fontFeatures: tabular))),
                   const SizedBox(width: 10),
-                  const Icon(Icons.copy_rounded, size: 18, color: kMuted),
+                  const Icon(CupertinoIcons.doc_on_doc, size: 18, color: kMuted),
                 ]),
               ),
             ),

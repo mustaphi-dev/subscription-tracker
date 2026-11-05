@@ -3,6 +3,7 @@ import 'dart:math';
 import 'dart:ui';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -107,7 +108,7 @@ class AppLogo extends StatelessWidget {
           borderRadius: BorderRadius.circular(size * 0.28),
           gradient: const LinearGradient(colors: [Color(0xFF2F6BFF), Color(0xFF8A5CFF)]),
         ),
-        child: Icon(Icons.autorenew_rounded, size: size * 0.55, color: Colors.white),
+        child: Icon(CupertinoIcons.arrow_2_circlepath, size: size * 0.55, color: Colors.white),
       );
 }
 
@@ -220,7 +221,7 @@ class _LockState extends ConsumerState<LiquidGlassLockScreen> {
               alignment: Alignment.centerLeft,
               child: widget.onCancel == null
                   ? const SizedBox(height: 48)
-                  : IconButton(tooltip: 'Cancel', icon: const Icon(Icons.close_rounded), onPressed: widget.onCancel),
+                  : IconButton(tooltip: 'Cancel', icon: const Icon(CupertinoIcons.xmark), onPressed: widget.onCancel),
             ),
             const Spacer(),
             const AppLogo(),
@@ -296,9 +297,9 @@ class _LockState extends ConsumerState<LiquidGlassLockScreen> {
       Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-          key(const Icon(Icons.face_unlock_outlined, size: 30), _bioAvailable ? _biometric : null, label: 'Face ID'),
+          key(const Icon(CupertinoIcons.viewfinder, size: 30), _bioAvailable ? _biometric : null, label: 'Face ID'),
           digit('0'),
-          key(const Icon(Icons.backspace_outlined), _backspace, label: 'Delete'),
+          key(const Icon(CupertinoIcons.delete_left), _backspace, label: 'Delete'),
         ]),
       ),
     ]);

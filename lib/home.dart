@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:ui' show lerpDouble;
 
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -89,7 +90,7 @@ class ShellScreen extends ConsumerWidget {
                         oval: true,
                         child: SizedBox.square(
                           dimension: h,
-                          child: Icon(Icons.add_rounded, size: lerpDouble(30, 26, c), semanticLabel: 'Add'),
+                          child: Icon(CupertinoIcons.plus, size: lerpDouble(30, 26, c), semanticLabel: 'Add'),
                         ),
                       ),
                     ),
@@ -114,10 +115,10 @@ class _TabBar extends StatelessWidget {
   final double labels;
 
   static const _items = [
-    (Icons.home_rounded, 'Home'),
-    (Icons.calendar_month_rounded, 'Calendar'),
-    (Icons.account_balance_rounded, 'Accounts'),
-    (Icons.insights_rounded, 'Insights'),
+    (CupertinoIcons.house, 'Home'),
+    (CupertinoIcons.calendar, 'Calendar'),
+    (CupertinoIcons.creditcard, 'Accounts'),
+    (CupertinoIcons.chart_bar, 'Insights'),
   ];
 
   @override
@@ -218,7 +219,7 @@ class TopBar extends ConsumerWidget {
               label: 'Upcoming',
               child: Pressable(
                 onTap: () => showSheet(context, const AlertsSheet()),
-                child: const Padding(padding: EdgeInsets.all(8), child: Icon(Icons.notifications_none_rounded)),
+                child: const Padding(padding: EdgeInsets.all(8), child: Icon(CupertinoIcons.bell)),
               ),
             ),
           ]),
@@ -418,8 +419,8 @@ class _Hero extends StatelessWidget {
           BigMoney(value, base, size: 52),
           const SizedBox(height: 14),
           Wrap(spacing: 8, runSpacing: 8, children: [
-            _Pill(icon: Icons.south_west_rounded, color: kMint, text: '${compactMoney(income, base)} in / mo'),
-            _Pill(icon: Icons.north_east_rounded, color: kCrimson, text: '${compactMoney(out, base)} out / mo'),
+            _Pill(icon: CupertinoIcons.arrow_down_left, color: kMint, text: '${compactMoney(income, base)} in / mo'),
+            _Pill(icon: CupertinoIcons.arrow_up_right, color: kCrimson, text: '${compactMoney(out, base)} out / mo'),
           ]),
         ]),
       );
@@ -468,7 +469,7 @@ class ShortfallAlerts extends ConsumerWidget {
             border: (s.days <= 2 ? kCrimson : kAmber).withValues(alpha: 0.3),
             padding: const EdgeInsets.fromLTRB(16, 14, 6, 14),
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Icon(Icons.warning_amber_rounded, color: s.days <= 2 ? kCrimson : kAmber),
+              Icon(CupertinoIcons.exclamationmark_triangle, color: s.days <= 2 ? kCrimson : kAmber),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -485,7 +486,7 @@ class ShortfallAlerts extends ConsumerWidget {
               IconButton(
                 tooltip: 'Dismiss',
                 visualDensity: VisualDensity.compact,
-                icon: const Icon(Icons.close_rounded, size: 18, color: kMuted),
+                icon: const Icon(CupertinoIcons.xmark, size: 18, color: kMuted),
                 onPressed: () => ref.read(_dismissedShortfalls.notifier).add(s.sourceId),
               ),
             ]),
@@ -605,7 +606,7 @@ class _ClearFilter extends StatelessWidget {
         onTap: onTap,
         child: const Row(children: [
           Text('Show all', style: TextStyle(color: kAccent, fontSize: 13, fontWeight: FontWeight.w600)),
-          Icon(Icons.close_rounded, size: 16, color: kAccent),
+          Icon(CupertinoIcons.xmark, size: 16, color: kAccent),
         ]),
       );
 }
@@ -844,14 +845,14 @@ class _EmptyState extends StatelessWidget {
 Future<void> scanReceipt(BuildContext context) async {
   final img = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 1600, imageQuality: 85);
   if (img == null || !context.mounted) return;
-  showToast(context, 'Reading receipt…', icon: Icons.auto_awesome_rounded, tone: kAccent, duration: const Duration(seconds: 20));
+  showToast(context, 'Reading receipt…', icon: CupertinoIcons.sparkles, tone: kAccent, duration: const Duration(seconds: 20));
   try {
     final res = await parseReceipt({'image_base64': base64Encode(await img.readAsBytes()), 'media_type': img.mimeType ?? 'image/jpeg'});
     if (!context.mounted) return;
     final item = res['item'];
     item != null
         ? showToast(context, 'Added ${item['merchant_name']}')
-        : showToast(context, 'No trial or subscription found in that image', icon: Icons.info_rounded, tone: kAmber);
+        : showToast(context, 'No trial or subscription found in that image', icon: CupertinoIcons.info_circle, tone: kAmber);
   } catch (e) {
     if (context.mounted) showError(context, 'Scan failed: ${functionError(e)}');
   }
@@ -881,20 +882,20 @@ class _AddSheet extends StatelessWidget {
                 Text(sub, style: caption),
               ]),
             ),
-            const Icon(Icons.chevron_right_rounded, color: kFaint),
+            const Icon(CupertinoIcons.chevron_right, color: kFaint),
           ]),
         );
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Padding(padding: const EdgeInsets.fromLTRB(4, 4, 4, 16), child: Text('Add', style: display(24))),
-        option(Icons.document_scanner_outlined, kAccent, 'Scan a receipt', 'AI reads trial dates and the post-trial charge', () {
+        option(CupertinoIcons.doc_text_viewfinder, kAccent, 'Scan a receipt', 'AI reads trial dates and the post-trial charge', () {
           // The sheet's context dies on pop; continue from the navigator's.
           final nav = Navigator.of(context)..pop();
           scanReceipt(nav.context);
         }),
         const SizedBox(height: 10),
-        option(Icons.edit_outlined, const Color(0xFF3D7BFF), 'Add manually', 'Subscription, trial, Pay in 3 or income', () {
+        option(CupertinoIcons.pencil, const Color(0xFF3D7BFF), 'Add manually', 'Subscription, trial, Pay in 3 or income', () {
           final nav = Navigator.of(context)..pop();
           showSheet(nav.context, const ManualItemForm());
         }),

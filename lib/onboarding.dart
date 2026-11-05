@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -409,7 +410,7 @@ class _TrialArt extends StatelessWidget {
                 : Builder(builder: (_) {
                     final hit = k == 0 || elapsed >= k;
                     return Row(children: [
-                      Icon(Icons.notifications_rounded, size: 13, color: hit ? _ink : _inkA(0.35)),
+                      Icon(CupertinoIcons.bell_fill, size: 13, color: hit ? _ink : _inkA(0.35)),
                       const SizedBox(width: 3),
                       Flexible(
                         child: Text(_marks[k]!,
@@ -489,7 +490,7 @@ class _ShortfallArt extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(color: kCrimson.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(12)),
-              child: const Icon(Icons.south_east_rounded, color: kCrimson, size: 20),
+              child: const Icon(CupertinoIcons.arrow_down_right, color: kCrimson, size: 20),
             ),
             const SizedBox(width: 12),
             Expanded(
