@@ -101,14 +101,10 @@ class AppLogo extends StatelessWidget {
   const AppLogo({super.key, this.size = 64});
   final double size;
   @override
-  Widget build(BuildContext context) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(size * 0.28),
-          gradient: const LinearGradient(colors: [Color(0xFF2F6BFF), Color(0xFF8A5CFF)]),
-        ),
-        child: Icon(CupertinoIcons.arrow_2_circlepath, size: size * 0.55, color: Colors.white),
+  Widget build(BuildContext context) => ClipRRect(
+        // Same art as the launcher icon, with iOS-style corner rounding.
+        borderRadius: BorderRadius.circular(size * 0.225),
+        child: Image.asset('assets/brand/icon.webp', width: size, height: size, filterQuality: FilterQuality.medium),
       );
 }
 

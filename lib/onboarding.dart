@@ -1,11 +1,13 @@
-import 'package:flutter/cupertino.dart' show CupertinoIcons;
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
+import 'package:video_player/video_player.dart';
 
-import 'lock.dart';
+import 'brand_mark.dart';
 import 'ui.dart';
 
 /// Has this device seen onboarding? Loaded before runApp so the router can redirect synchronously.
@@ -19,83 +21,218 @@ Future<void> finishOnboarding() async {
   onboarded.value = true;
 }
 
+/// Eased 0→1 progress of [t] across the window [a, b].
+double _span(double t, double a, double b, [Curve curve = Curves.easeOutCubic]) => curve.transform(((t - a) / (b - a)).clamp(0.0, 1.0));
+
+/// Fade + rise driven by [r] (0 hidden, 1 in place).
+Widget _rise(double r, Widget child, {double dy = 16}) => Opacity(
+  opacity: r.clamp(0.0, 1.0),
+  child: Transform.translate(offset: Offset(0, (1 - r) * dy), child: child),
+);
+
 // ───────── Splash ─────────
 
-/// Cold-start brand moment layered over the app; fades away on its own.
+/// Cold-start brand moment layered over the app. The native launch screen is only the
+/// background colour. A violet light traces an S out of the dark, the chrome S (the app
+/// icon's mark) materialises around it with the light settling into its groove, a sheen
+/// crosses the metal, the wordmark writes itself in underneath, and everything dissolves
+/// into the app. Tap to skip; reduced motion shows the finished mark and fades.
 class SplashOverlay extends StatefulWidget {
   const SplashOverlay({super.key});
   @override
   State<SplashOverlay> createState() => _SplashOverlayState();
 }
 
-class _SplashOverlayState extends State<SplashOverlay> {
-  bool _visible = true, _gone = false;
+class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateMixin {
+  static const _length = Duration(milliseconds: 2500);
+
+  /// Fraction of the intro at which the chrome S has fully appeared.
+  static const _traced = 0.6;
+
+  late final _intro = AnimationController(vsync: this, duration: _length);
+  late final _exit = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
+  bool _started = false, _leaving = false, _gone = false;
 
   @override
-  void initState() {
-    super.initState();
-    Future.delayed(const Duration(milliseconds: 1300), () {
-      if (mounted) setState(() => _visible = false);
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    // Start once the chrome S is decoded (or after a beat regardless), so it never pops in late.
+    var begun = false;
+    void begin() {
+      if (begun || !mounted) return;
+      begun = true;
+      if (reduced) {
+        _intro.value = 1;
+        Future.delayed(const Duration(milliseconds: 700), _leave);
+        return;
+      }
+      _intro.forward().then((_) => _leave());
+      Future.delayed(_length * _traced, () {
+        if (mounted && !_leaving) HapticFeedback.lightImpact();
+      });
+    }
+
+    precacheImage(const AssetImage(kMarkAsset), context).whenComplete(begin);
+    Future.delayed(const Duration(milliseconds: 600), begin);
+  }
+
+  void _leave() {
+    if (!mounted || _leaving) return;
+    _leaving = true;
+    _intro.stop();
+    _exit.forward().then((_) {
+      if (mounted) setState(() => _gone = true);
     });
+  }
+
+  @override
+  void dispose() {
+    _intro.dispose();
+    _exit.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     if (_gone) return const SizedBox.shrink();
-    return IgnorePointer(
-      ignoring: !_visible,
-      child: AnimatedOpacity(
-        opacity: _visible ? 1 : 0,
-        duration: const Duration(milliseconds: 450),
-        curve: Curves.easeOut,
-        onEnd: () => setState(() => _gone = true),
-        child: ColoredBox(
-          color: kBg,
-          child: Center(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Stack(alignment: Alignment.center, children: [
-                Container(
-                  width: 180,
-                  height: 180,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: RadialGradient(colors: [kAccent.withValues(alpha: 0.35), kAccent.withValues(alpha: 0)]),
-                  ),
-                ).animate().scale(begin: const Offset(0.4, 0.4), duration: 900.ms, curve: Curves.easeOutCubic).fadeIn(),
-                const AppLogo(size: 84)
-                    .animate()
-                    .scale(begin: const Offset(0.5, 0.5), duration: 700.ms, curve: springBounce)
-                    .fadeIn(duration: 200.ms)
-                    .then(delay: 120.ms)
-                    .rotate(begin: 0, end: 0.5, duration: 600.ms, curve: Curves.easeInOutCubic),
-              ]),
-              const SizedBox(height: 8),
-              Text('Subtracker', style: display(26))
-                  .animate()
-                  .fadeIn(delay: 350.ms, duration: 400.ms)
-                  .slideY(begin: 0.4, curve: springOut, duration: 500.ms),
-            ]),
+    return AnimatedBuilder(
+      animation: Listenable.merge([_intro, _exit]),
+      builder: (context, _) {
+        final t = _intro.value, e = Curves.easeInCubic.transform(_exit.value);
+        final size = math.min(MediaQuery.sizeOf(context).width * 0.5, 210.0);
+
+        final run = _span(t, 0.03, 0.46, Curves.easeInOutCubic);            // light traces the S
+        final settle = _span(t, 0.3, _traced);                              // ...and stays lit
+        final rise = _span(t, 0.32, _traced);                               // chrome materialises round it
+        final glow = _span(t, 0.4, _traced + 0.25);
+        final lift = _span(t, _traced, 0.9, Curves.easeInOutCubic);
+        final shift = Offset(0, -26 * lift);
+
+        const word = 'Subtracker';
+        final w0 = _traced + 0.02;
+        final wordIn = _span(t, w0, w0 + 0.34);
+
+        return IgnorePointer(
+          ignoring: _leaving,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _leave,
+            child: Opacity(
+              opacity: 1 - e,
+              child: ColoredBox(
+                color: kBg,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Violet light pooling behind the S once it is lit.
+                    Center(
+                      child: Transform.translate(
+                        offset: shift,
+                        child: Container(
+                          width: size * 2.8,
+                          height: size * 2.8,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              colors: [
+                                const Color(0xFF7B4DFF).withValues(alpha: 0.28 * glow),
+                                const Color(0xFF4B2BD6).withValues(alpha: 0.08 * glow),
+                                const Color(0xFF4B2BD6).withValues(alpha: 0),
+                              ],
+                              stops: const [0, 0.4, 1],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Center(
+                      child: Transform.translate(
+                        offset: shift,
+                        child: Transform.scale(
+                          scale: (0.96 + 0.04 * Curves.easeOutCubic.transform(rise)) * (1 + 0.18 * e),
+                          child: BrandMark(
+                            size: size,
+                            chrome: rise,
+                            head: run * 1.45,
+                            tail: 0.45,
+                            settle: settle,
+                            sheen: _span(t, _traced - 0.06, _traced + 0.3, Curves.easeInOut),
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Wordmark: each letter fades up in turn, the word settling as it completes.
+                    Center(
+                      child: Transform.translate(
+                        offset: shift + Offset(0, size / 2 + 34 + 10 * (1 - wordIn)),
+                        child: Text.rich(
+                          TextSpan(
+                            children: [
+                              for (var i = 0; i < word.length; i++)
+                                TextSpan(
+                                  text: word[i],
+                                  style: TextStyle(color: Colors.white.withValues(alpha: _span(t, w0 + 0.022 * i, w0 + 0.022 * i + 0.14))),
+                                ),
+                            ],
+                          ),
+                          style: display(30, weight: FontWeight.w600).copyWith(letterSpacing: -0.9 + 2.4 * (1 - wordIn)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
 
+/// Seconds since mount, ticking every frame; freeze it for reduced motion.
+class SceneClock extends ValueNotifier<double> {
+  SceneClock(TickerProvider vsync) : super(0) {
+    _ticker = vsync.createTicker((e) => value = e.inMicroseconds / 1e6)..start();
+  }
+  late final Ticker _ticker;
+
+  void freeze() => _ticker.stop();
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    super.dispose();
+  }
+}
+
 // ───────── Onboarding ─────────
-// Each page is a full-colour card carrying a real piece of the product. Everything inside
-// is driven by the page position, so dragging between pages scrubs the animation.
+// One cinematic render per page, full bleed, with a single line of big type over it.
+// Swiping cross-fades the renders with a little parallax; each render also breathes
+// slowly (scale + drift) so the screen never feels like a static poster.
 
-/// Eased 0→1 progress of [t] across the window [a, b].
-double _span(double t, double a, double b) => Curves.easeOutCubic.transform(((t - a) / (b - a)).clamp(0.0, 1.0));
+class _Page {
+  const _Page(this.name, this.title, this.tone);
+  final String name, title;
 
-/// Fade + rise driven by [r] (0 hidden, 1 in place).
-Widget _rise(double r, Widget child, {double dy = 16}) =>
-    Opacity(opacity: r, child: Transform.translate(offset: Offset(0, (1 - r) * dy), child: child));
+  /// Darkest colour at the bottom of the render; the text scrim fades into it.
+  final Color tone;
 
-/// Dark ink used for type drawn directly on the coloured cards.
-const _ink = kBg;
-Color _inkA(double a) => _ink.withValues(alpha: a);
+  /// First frame of the loop, shown instantly and whenever video can't play.
+  String get still => 'assets/onboarding/$name.jpg';
+
+  /// Seamless loop that starts and ends on [still].
+  String get video => 'assets/onboarding/$name.mp4';
+}
+
+const _pagesData = [
+  _Page('renewals', 'Every renewal,\nbefore it hits.', Color(0xFF0B0A15)),
+  _Page('trials', 'Trials end on\nyour terms.', Color(0xFF1E0A07)),
+  _Page('shortfalls', 'See a shortfall\ncoming.', Color(0xFF160708)),
+];
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -103,26 +240,62 @@ class OnboardingScreen extends StatefulWidget {
   State<OnboardingScreen> createState() => _OnboardingState();
 }
 
-class _OnboardingState extends State<OnboardingScreen> {
+class _OnboardingState extends State<OnboardingScreen> with SingleTickerProviderStateMixin {
   final _pages = PageController();
+  late final _clock = SceneClock(this);
   int _page = 0;
+  bool _prepared = false, _still = false;
 
-  static const _copy = [
-    ('Every renewal,\nbefore it hits.', 'Subscriptions, Pay in 3 and income from all your accounts, in the order the money actually moves.'),
-    ('Trials end on\nyour terms.', 'We remind you 7 days, 3 days and 24 hours before a free trial starts charging.'),
-    ('See a shortfall\ncoming.', 'If this week\'s renewals would overdraw an account, you\'ll know how much to move and by when.'),
-  ];
-  static const _cards = [
-    ('RENEWALS', Color(0xFFA99DFF)),
-    ('FREE TRIALS', Color(0xFFFFC266)),
-    ('SHORTFALLS', Color(0xFFFF8F80)),
-  ];
+  /// One muted looping player per page; only the visible page plays.
+  final _videos = [for (final p in _pagesData) VideoPlayerController.asset(p.video, videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true))];
 
-  bool get _last => _page == _copy.length - 1;
+  @override
+  void initState() {
+    super.initState();
+    for (final v in _videos) {
+      v
+        ..setLooping(true)
+        ..setVolume(0)
+        ..initialize().then((_) => _syncPlayback(), onError: (_) {}); // still image stays on failure
+    }
+  }
+
+  void _syncPlayback() {
+    if (!mounted) return;
+    for (var i = 0; i < _videos.length; i++) {
+      final v = _videos[i];
+      if (!v.value.isInitialized) continue;
+      if (i == _page && !_still) {
+        v.play();
+      } else {
+        v.pause();
+      }
+    }
+  }
+
+  bool get _last => _page == _pagesData.length - 1;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_prepared) return;
+    _prepared = true;
+    for (final p in _pagesData) {
+      precacheImage(AssetImage(p.still), context);
+    }
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _still = true;
+      _clock.freeze();
+    }
+  }
 
   @override
   void dispose() {
     _pages.dispose();
+    _clock.dispose();
+    for (final v in _videos) {
+      v.dispose();
+    }
     super.dispose();
   }
 
@@ -138,132 +311,182 @@ class _OnboardingState extends State<OnboardingScreen> {
       return;
     }
     HapticFeedback.selectionClick();
-    _pages.nextPage(duration: const Duration(milliseconds: 560), curve: Curves.easeInOutCubic);
+    _pages.nextPage(duration: const Duration(milliseconds: 700), curve: Curves.easeInOutCubic);
   }
-
-  Widget _art(int i, double t) => switch (i) {
-        0 => _RenewalsArt(t),
-        1 => _TrialArt(t),
-        _ => _ShortfallArt(t, _cards[2].$2),
-      };
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        backgroundColor: kBg,
-        body: SafeArea(
-          // One-off intro so the first card lands on open; afterwards the page position drives everything.
-          child: TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0, end: 1),
-            duration: const Duration(milliseconds: 1300),
-            builder: (_, intro, _) => AnimatedBuilder(
-              animation: _pages,
-              builder: (_, _) {
-                final pos = _pages.hasClients && _pages.position.haveDimensions ? _pages.page ?? 0 : _page.toDouble();
-                final land = _span(intro, 0, 0.5);
-                return Column(children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 8, 4),
-                    child: Row(children: [
-                      Expanded(child: _Progress(pos: pos, count: _copy.length)),
-                      const SizedBox(width: 8),
-                      AnimatedOpacity(
-                        opacity: _last ? 0 : 1,
-                        duration: const Duration(milliseconds: 200),
-                        child: TextButton(onPressed: _last ? null : _done, child: const Text('Skip', style: TextStyle(color: kMuted))),
+    backgroundColor: kBg,
+    body: TweenAnimationBuilder<double>(
+      // One-off entrance; afterwards the page position drives everything.
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 1600),
+      builder: (_, intro, _) => AnimatedBuilder(
+        animation: Listenable.merge([_pages, _clock]),
+        builder: (context, _) {
+          final pos = _pages.hasClients && _pages.position.haveDimensions ? _pages.page ?? 0 : _page.toDouble();
+          final now = _clock.value;
+          final w = MediaQuery.sizeOf(context).width;
+          final i0 = pos.floor().clamp(0, _pagesData.length - 1), i1 = pos.ceil().clamp(0, _pagesData.length - 1);
+          final tone = Color.lerp(_pagesData[i0].tone, _pagesData[i1].tone, pos - pos.floor())!;
+
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              ColoredBox(color: tone),
+              // Renders: the one being left fades out under the one arriving.
+              for (var i = 0; i < _pagesData.length; i++)
+                if ((pos - i).abs() < 1)
+                  Opacity(
+                    opacity: (1 - (pos - i).abs()).clamp(0.0, 1.0) * _span(intro, 0, 0.5),
+                    child: Transform.translate(
+                      offset: Offset(-(pos - i) * 0.35 * w, 36 + 6 * math.sin(now * 0.6 + i)),
+                      child: Transform.scale(
+                        alignment: const Alignment(0, -0.4),
+                        scale: (1.08 + 0.02 * math.sin(now * 0.35 + i * 2) + 0.06 * (1 - _span(intro, 0, 1)) + 0.05 * (pos - i).abs()),
+                        // Full width so the whole composition shows; the bottom melts into the page tone.
+                        child: Align(
+                          alignment: Alignment.topCenter,
+                          child: ShaderMask(
+                            blendMode: BlendMode.dstIn,
+                            shaderCallback: (r) => const LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [Colors.white, Colors.white, Colors.transparent],
+                              stops: [0, 0.8, 1],
+                            ).createShader(r),
+                            child: Stack(
+                              children: [
+                                Image.asset(_pagesData[i].still, width: w, fit: BoxFit.fitWidth, alignment: Alignment.topCenter),
+                                Positioned.fill(child: _Loop(_videos[i])),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
-                    ]),
+                    ),
                   ),
-                  Expanded(
-                    child: PageView.builder(
-                      controller: _pages,
-                      itemCount: _copy.length,
-                      onPageChanged: (i) => setState(() => _page = i),
-                      itemBuilder: (_, i) {
-                        final d = pos - i;
-                        final t = (1 - d.abs()).clamp(0.0, 1.0) * intro;
-                        final (tag, color) = _cards[i];
-                        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Expanded(
+              // Scrim so the type always reads.
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [tone.withValues(alpha: 0.35), tone.withValues(alpha: 0), tone.withValues(alpha: 0), tone.withValues(alpha: 0.85), tone],
+                    stops: const [0, 0.14, 0.5, 0.78, 1],
+                  ),
+                ),
+              ),
+              SafeArea(
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(28, 14, 28, 0),
+                      child: Opacity(
+                        opacity: _span(intro, 0.3, 0.8),
+                        child: _Progress(pos: pos, count: _pagesData.length),
+                      ),
+                    ),
+                    Expanded(
+                      child: PageView.builder(
+                        controller: _pages,
+                        itemCount: _pagesData.length,
+                        onPageChanged: (i) {
+                          setState(() => _page = i);
+                          _syncPlayback();
+                        },
+                        itemBuilder: (_, i) {
+                          final t = (1 - (pos - i).abs()).clamp(0.0, 1.0) * intro;
+                          final lines = _pagesData[i].title.split('\n');
+                          return Align(
+                            alignment: Alignment.bottomCenter,
                             child: Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                              child: Opacity(
-                                opacity: land,
-                                child: Transform.translate(
-                                  offset: Offset(0, (1 - land) * 48),
-                                  child: Transform.scale(
-                                    scale: 1 - 0.07 * d.abs(),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(36),
-                                      child: ColoredBox(
-                                        color: color,
-                                        child: Stack(children: [
-                                          Positioned(
-                                            left: 24,
-                                            top: 22,
-                                            child: Text(tag, style: TextStyle(color: _inkA(0.55), fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.2)),
-                                          ),
-                                          Positioned(
-                                            right: 24,
-                                            top: 22,
-                                            child: Text('0${i + 1}', style: TextStyle(color: _inkA(0.55), fontSize: 11, fontWeight: FontWeight.w700, fontFeatures: tabular)),
-                                          ),
-                                          // Art lags the card for depth, clipped to the card.
-                                          Positioned.fill(
-                                            child: Transform.translate(
-                                              offset: Offset(d * 140, 0),
-                                              child: Padding(
-                                                padding: const EdgeInsets.fromLTRB(20, 52, 20, 20),
-                                                child: LayoutBuilder(
-                                                  builder: (_, c) => Center(
-                                                    child: FittedBox(
-                                                      fit: BoxFit.scaleDown,
-                                                      child: SizedBox(width: c.maxWidth, child: _art(i, t)),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ]),
+                              padding: const EdgeInsets.fromLTRB(24, 0, 24, 36),
+                              child: ShaderMask(
+                                // Bright at the top, melting into the scene at the bottom.
+                                shaderCallback: (r) => LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [Colors.white, Colors.white.withValues(alpha: 0.62)],
+                                ).createShader(r),
+                                blendMode: BlendMode.modulate,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    for (var k = 0; k < lines.length; k++)
+                                      _rise(
+                                        _span(t, 0.25 + 0.12 * k, 0.85 + 0.12 * k),
+                                        Text(
+                                          lines[k],
+                                          textAlign: TextAlign.center,
+                                          style: display(44, weight: FontWeight.w500).copyWith(height: 1.08, letterSpacing: -1.8),
+                                        ),
+                                        dy: 22,
                                       ),
-                                    ),
-                                  ),
+                                  ],
                                 ),
                               ),
                             ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
-                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              _rise(_span(t, 0.2, 0.8), Text(_copy[i].$1, style: display(32)), dy: 10),
-                              const SizedBox(height: 10),
-                              _rise(
-                                _span(t, 0.35, 0.95),
-                                Text(_copy[i].$2, style: const TextStyle(color: kMuted, fontSize: 15, height: 1.45)),
-                                dy: 10,
-                              ),
-                            ]),
-                          ),
-                        ]);
-                      },
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
-                    child: FilledButton(
-                      onPressed: _next,
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 200),
-                        child: Text(_last ? 'Get started' : 'Continue', key: ValueKey(_last)),
+                          );
+                        },
                       ),
                     ),
-                  ),
-                ]);
-              },
-            ),
-          ),
-        ),
-      );
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 18),
+                      child: _rise(
+                        _span(intro, 0.45, 1),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 58,
+                          child: FilledButton(
+                            onPressed: _next,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: Colors.black,
+                              textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: -0.2),
+                            ),
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 220),
+                              child: Text(_last ? 'Get started' : 'Continue', key: ValueKey(_last)),
+                            ),
+                          ),
+                        ),
+                        dy: 20,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    ),
+  );
+}
+
+/// The page's video, faded in over the still once frames are actually flowing.
+class _Loop extends StatelessWidget {
+  const _Loop(this.video);
+  final VideoPlayerController video;
+
+  @override
+  Widget build(BuildContext context) {
+    final v = video.value;
+    final live = v.isInitialized && v.isPlaying && v.position > Duration.zero;
+    return AnimatedOpacity(
+      opacity: live ? 1 : 0,
+      duration: const Duration(milliseconds: 450),
+      child: v.isInitialized
+          ? FittedBox(
+              fit: BoxFit.cover,
+              alignment: Alignment.topCenter,
+              clipBehavior: Clip.hardEdge,
+              child: SizedBox.fromSize(size: v.size, child: VideoPlayer(video)),
+            )
+          : const SizedBox.shrink(),
+    );
+  }
 }
 
 /// Story-style segments that fill continuously with the page position.
@@ -272,272 +495,24 @@ class _Progress extends StatelessWidget {
   final double pos;
   final int count;
   @override
-  Widget build(BuildContext context) => Row(children: [
-        for (var k = 0; k < count; k++) ...[
-          if (k > 0) const SizedBox(width: 6),
-          Expanded(
-            child: Container(
-              height: 3,
-              decoration: BoxDecoration(color: kLine, borderRadius: BorderRadius.circular(2)),
-              alignment: Alignment.centerLeft,
-              child: FractionallySizedBox(
-                widthFactor: (pos - k + 1).clamp(0.0, 1.0),
-                child: Container(decoration: BoxDecoration(color: kText, borderRadius: BorderRadius.circular(2))),
-              ),
-            ),
-          ),
-        ],
-      ]);
-}
-
-/// Dark app surface sitting on a coloured card.
-Widget _panel(Widget child, {EdgeInsets padding = const EdgeInsets.all(16)}) => Container(
-      padding: padding,
-      decoration: BoxDecoration(
-        color: kBg,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: _inkA(0.25), blurRadius: 32, offset: const Offset(0, 16))],
-      ),
-      child: child,
-    );
-
-const _small = TextStyle(color: kMuted, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.6);
-
-/// Page 1: the week's ledger, rows landing one after another.
-class _RenewalsArt extends StatelessWidget {
-  const _RenewalsArt(this.t);
-  final double t;
-
-  static final _rows = [
-    ('TUE', '12', 'Spotify', 'Revolut', '−£11.99', providerColors['revolut']!),
-    ('FRI', '15', 'Klarna', 'Lloyds · 2 of 3', '−£35.00', providerColors['lloyds']!),
-    ('MON', '18', 'Netflix', 'Trial ends', '−£10.99', kAmber),
-    ('THU', '21', 'Salary', 'Lloyds', '+£2,140.00', kMint),
-  ];
-
-  @override
-  Widget build(BuildContext context) => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _rise(
-          _span(t, 0, 0.45),
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Next 10 days', style: display(16, color: _inkA(0.65), weight: FontWeight.w600)),
-            BigMoney(57.98, 'GBP', size: 44, color: _ink),
-          ]),
-        ),
-        const SizedBox(height: 16),
-        _rise(
-          _span(t, 0.1, 0.55),
-          _panel(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            Column(children: [
-              for (var k = 0; k < _rows.length; k++) _rise(_span(t, 0.2 + 0.1 * k, 0.6 + 0.1 * k), _row(_rows[k], first: k == 0), dy: 10),
-            ]),
-          ),
-          dy: 32,
-        ),
-      ]);
-
-  Widget _row((String, String, String, String, String, Color) r, {required bool first}) {
-    final (dow, day, name, sub, amount, color) = r;
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: BoxDecoration(border: first ? null : const Border(top: BorderSide(color: kLine))),
-      child: Row(children: [
-        SizedBox(
-          width: 40,
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(dow, style: _small.copyWith(fontSize: 10)),
-            Text(day, style: display(18)),
-          ]),
-        ),
-        Container(width: 3, height: 28, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
-        const SizedBox(width: 12),
+  Widget build(BuildContext context) => Row(
+    children: [
+      for (var k = 0; k < count; k++) ...[
+        if (k > 0) const SizedBox(width: 6),
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
-            Text(sub, style: caption),
-          ]),
-        ),
-        Text(amount, style: TextStyle(fontWeight: FontWeight.w600, fontFeatures: tabular, color: amount.startsWith('+') ? kMint : kText)),
-      ]),
-    );
-  }
-}
-
-/// Page 2: a 7-day trial ticking down, reminders marked, and the push you'd get at 3 days.
-class _TrialArt extends StatelessWidget {
-  const _TrialArt(this.t);
-  final double t;
-
-  static const _marks = {0: '7 days', 4: '3 days', 6: '1 day'};
-
-  @override
-  Widget build(BuildContext context) {
-    final elapsed = 4 * _span(t, 0.1, 0.75);
-    return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _rise(
-        _span(t, 0, 0.4),
-        Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-          Text('${7 - elapsed.round()}', style: display(96, color: _ink)),
-          const SizedBox(width: 10),
-          Text('days left on\nyour Netflix trial', style: display(17, color: _inkA(0.7), weight: FontWeight.w600)),
-        ]),
-      ),
-      const SizedBox(height: 12),
-      Row(children: [
-        for (var k = 0; k < 7; k++) ...[
-          if (k > 0) const SizedBox(width: 4),
-          Expanded(
-            child: Container(
-              height: 8,
-              alignment: Alignment.centerLeft,
-              decoration: BoxDecoration(color: _inkA(0.15), borderRadius: BorderRadius.circular(4)),
-              child: FractionallySizedBox(
-                widthFactor: (elapsed - k).clamp(0.0, 1.0),
-                child: Container(decoration: BoxDecoration(color: _ink, borderRadius: BorderRadius.circular(4))),
+          child: Container(
+            height: 3,
+            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.22), borderRadius: BorderRadius.circular(2)),
+            alignment: Alignment.centerLeft,
+            child: FractionallySizedBox(
+              widthFactor: (pos - k + 1).clamp(0.0, 1.0),
+              child: Container(
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(2)),
               ),
             ),
           ),
-        ],
-      ]),
-      const SizedBox(height: 10),
-      Row(children: [
-        for (var k = 0; k < 7; k++) ...[
-          if (k > 0) const SizedBox(width: 4),
-          Expanded(
-            child: _marks[k] == null
-                ? const SizedBox()
-                : Builder(builder: (_) {
-                    final hit = k == 0 || elapsed >= k;
-                    return Row(children: [
-                      Icon(CupertinoIcons.bell_fill, size: 13, color: hit ? _ink : _inkA(0.35)),
-                      const SizedBox(width: 3),
-                      Flexible(
-                        child: Text(_marks[k]!,
-                            softWrap: false,
-                            overflow: TextOverflow.visible,
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: hit ? _ink : _inkA(0.45))),
-                      ),
-                    ]);
-                  }),
-          ),
-        ],
-      ]),
-      const SizedBox(height: 24),
-      // The actual reminder, arriving as the bar reaches 3 days.
-      _rise(
-        _span(t, 0.7, 1),
-        _panel(
-          padding: const EdgeInsets.all(14),
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const AppLogo(size: 36),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Row(children: [
-                  Text('Subtracker', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                  Spacer(),
-                  Text('now', style: caption),
-                ]),
-                const SizedBox(height: 2),
-                const Text('Netflix trial ends in 3 days', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 2),
-                Text('Then £10.99 a month from 14 Dec. Cancel now if you won\'t use it.', style: caption.copyWith(height: 1.35)),
-              ]),
-            ),
-          ]),
         ),
-        dy: -24,
-      ),
-    ]);
-  }
-}
-
-/// Page 3: this week's charges fill a bar past the account balance, then the alert lands.
-class _ShortfallArt extends StatelessWidget {
-  const _ShortfallArt(this.t, this.card);
-  final double t;
-  final Color card;
-
-  static const _balance = 42.67;
-  static const _charges = [35.00, 11.99, 10.99, 8.99]; // sums to 66.97 → £24.30 short
-
-  @override
-  Widget build(BuildContext context) {
-    final fill = _span(t, 0.15, 0.8);
-    return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _rise(
-        _span(t, 0, 0.4),
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Revolut balance', style: display(16, color: _inkA(0.65), weight: FontWeight.w600)),
-          BigMoney(_balance, 'GBP', size: 44, color: _ink),
-        ]),
-      ),
-      const SizedBox(height: 20),
-      SizedBox(height: 28, width: double.infinity, child: CustomPaint(painter: _BarPainter(fill, card))),
-      const SizedBox(height: 8),
-      Row(children: [
-        Text('Due by Thursday', style: TextStyle(color: _inkA(0.65), fontWeight: FontWeight.w600)),
-        const Spacer(),
-        Text('£66.97', style: TextStyle(color: _ink, fontWeight: FontWeight.w700, fontFeatures: tabular)),
-      ]),
-      const SizedBox(height: 24),
-      _rise(
-        _span(t, 0.7, 1),
-        _panel(
-          Row(children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(color: kCrimson.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(12)),
-              child: const Icon(CupertinoIcons.arrow_down_right, color: kCrimson, size: 20),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('£24.30 short', style: display(18, color: kCrimson)),
-                const Text('Top up Revolut before Thursday', style: caption),
-              ]),
-            ),
-          ]),
-        ),
-        dy: 24,
-      ),
-    ]);
-  }
-}
-
-class _BarPainter extends CustomPainter {
-  _BarPainter(this.fill, this.card);
-  final double fill;
-  final Color card;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final total = _ShortfallArt._charges.fold(0.0, (s, c) => s + c);
-    final mark = size.width * _ShortfallArt._balance / total;
-    final bar = Rect.fromLTWH(0, (size.height - 14) / 2, size.width, 14);
-    final r = RRect.fromRectAndRadius(bar, const Radius.circular(7));
-    canvas.drawRRect(r, Paint()..color = _inkA(0.15));
-
-    canvas.save();
-    canvas.clipRRect(r);
-    final end = size.width * fill;
-    canvas.drawRect(Rect.fromLTRB(0, bar.top, end.clamp(0, mark), bar.bottom), Paint()..color = _ink);
-    // Deeper red than kCrimson: kCrimson disappears against the coral card.
-    if (end > mark) canvas.drawRect(Rect.fromLTRB(mark, bar.top, end, bar.bottom), Paint()..color = const Color(0xFFC0182B));
-    // Gaps between individual charges, cut in the card colour.
-    var x = 0.0;
-    for (final c in _ShortfallArt._charges.take(_ShortfallArt._charges.length - 1)) {
-      x += size.width * c / total;
-      if (x < end) canvas.drawRect(Rect.fromLTWH(x - 1.5, bar.top, 3, bar.height), Paint()..color = card);
-    }
-    canvas.restore();
-
-    // Balance marker.
-    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(mark - 1.5, 0, 3, size.height), const Radius.circular(2)), Paint()..color = _ink);
-  }
-
-  @override
-  bool shouldRepaint(_BarPainter o) => o.fill != fill || o.card != card;
+      ],
+    ],
+  );
 }
