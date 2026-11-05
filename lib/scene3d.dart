@@ -180,44 +180,6 @@ class IconToken extends StatelessWidget {
       );
 }
 
-/// A glossy sphere: a radial gradient lit from the top-left, plus a soft coloured glow.
-class Orb extends StatelessWidget {
-  const Orb({super.key, required this.color, required this.transform, this.size = 40, this.opacity = 1});
-  final Color color;
-  final Matrix4 transform;
-  final double size, opacity;
-
-  @override
-  Widget build(BuildContext context) {
-    final hsl = HSLColor.fromColor(color);
-    return Opacity(
-      opacity: opacity.clamp(0.0, 1.0),
-      child: Transform(
-        transform: transform,
-        alignment: Alignment.center,
-        child: Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: RadialGradient(
-              center: const Alignment(-0.35, -0.45),
-              radius: 0.95,
-              colors: [
-                hsl.withLightness((hsl.lightness + 0.3).clamp(0, 0.95)).toColor(),
-                color,
-                hsl.withLightness((hsl.lightness - 0.3).clamp(0.04, 1)).toColor(),
-              ],
-              stops: const [0, 0.45, 1],
-            ),
-            boxShadow: [BoxShadow(color: color.withValues(alpha: 0.45), blurRadius: size * 0.8)],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// Slow-moving coloured light behind a scene, with drifting motes and a fade to the page
 /// colour at the bottom so text stays readable. [colors] can change every frame (it's
 /// interpolated while swiping between onboarding pages).

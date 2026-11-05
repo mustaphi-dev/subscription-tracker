@@ -410,12 +410,44 @@ const _glass = BoxDecoration(
   gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF1E2129), Color(0xFF101217)]),
 );
 
-Widget _letter(String name, Color color, {double size = 28}) => Container(
-      width: size,
-      height: size,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(size * 0.32)),
-      child: Text(name[0], style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: size * 0.48)),
+/// A brand mark from assets/brands, as a full-bleed app icon.
+Widget _logo(String slug, {double? size}) => Image.asset('assets/brands/$slug.png',
+    width: size, height: size, fit: BoxFit.cover, filterQuality: FilterQuality.medium);
+
+/// Small rounded logo for inline use.
+Widget _logoChip(String slug, double size) =>
+    ClipRRect(borderRadius: BorderRadius.circular(size * 0.26), child: _logo(slug, size: size));
+
+/// Dark price pill that hangs under a floating app icon.
+Widget _pricePill(String price, Matrix4 m, double opacity) => Opacity(
+      opacity: opacity.clamp(0.0, 1.0),
+      child: Transform(
+        transform: m,
+        alignment: Alignment.center,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xE6101217),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+          ),
+          child: Text(price, style: const TextStyle(color: kText, fontSize: 11.5, fontWeight: FontWeight.w600, fontFeatures: tabular)),
+        ),
+      ),
+    );
+
+/// A brand app icon as a thick glossy slab.
+Widget _iconSlab(String slug, {required Matrix4 m, required double rx, required double ry, double size = 68, double opacity = 1}) => Slab(
+      size: Size.square(size),
+      radius: size * 0.26,
+      depth: size * 0.14,
+      rx: rx,
+      ry: ry,
+      gloss: 0.3,
+      edge: const Color(0xFF2A2D35),
+      opacity: opacity,
+      transform: m,
+      face: _logo(slug),
     );
 
 /// A node in a scene, sorted back-to-front before painting.
@@ -436,14 +468,14 @@ class _OrbitScene extends StatelessWidget {
   final double t, d, now;
 
   static const _tiles = [
-    ('Spotify', '£11.99', Color(0xFF1DB954)),
-    ('Netflix', '£10.99', Color(0xFFE50914)),
-    ('iCloud+', '£2.99', Color(0xFF3D7BFF)),
-    ('Klarna', '£35.00', Color(0xFFF7A1C4)),
-    ('Gym', '£24.00', Color(0xFF34D399)),
-    ('Disney+', '£7.99', Color(0xFF1A3DBF)),
+    ('spotify', '£11.99'),
+    ('netflix', '£10.99'),
+    ('icloud', '£2.99'),
+    ('klarna', '£35.00'),
+    ('openai', '£20.00'),
+    ('youtube', '£12.99'),
   ];
-  static const _r = 150.0, _tilt = 0.5, _xs = 0.82;
+  static const _r = 150.0, _tilt = 0.5, _xs = 0.86;
 
   @override
   Widget build(BuildContext context) {
@@ -453,38 +485,14 @@ class _OrbitScene extends StatelessWidget {
       final a = spin + i * math.pi * 2 / _tiles.length;
       final x = _r * _xs * math.cos(a), z0 = _r * math.sin(a);
       final y = -z0 * math.sin(_tilt), z = z0 * math.cos(_tilt);
-      final ti = _span(t, 0.05 + 0.07 * i, 0.55 + 0.07 * i);
+      final ti = _span(t, 0.05 + 0.07 * i, 0.55 + 0.07 * i, Curves.easeOutBack);
       final near = (1 - z / _r) / 2; // 1 nearest, 0 farthest
-      final ry = -math.cos(a) * 0.45, rx = 0.12;
-      final (name, price, color) = _tiles[i];
-      nodes.add((
-        z,
-        Slab(
-          size: const Size(126, 48),
-          radius: 15,
-          depth: 6,
-          rx: rx,
-          ry: ry,
-          opacity: ti * (0.45 + 0.55 * near),
-          transform: place(Offset(x, y - 10), z: z, rx: rx, ry: ry, scale: (0.7 + 0.3 * ti) * 0.92),
-          face: DecoratedBox(
-            decoration: _glass,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: Row(children: [
-                _letter(name, color),
-                const SizedBox(width: 9),
-                Expanded(
-                  child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(name, maxLines: 1, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: kText)),
-                    Text(price, style: const TextStyle(fontSize: 11.5, color: kMuted, fontFeatures: tabular)),
-                  ]),
-                ),
-              ]),
-            ),
-          ),
-        ),
-      ));
+      final ry = -math.cos(a) * 0.5 + 0.15 * math.sin(now * 0.9 + i), rx = 0.18;
+      final (slug, price) = _tiles[i];
+      final fade = _span(t, 0.05 + 0.07 * i, 0.4 + 0.07 * i) * (0.5 + 0.5 * near);
+      final scale = 0.6 + 0.4 * ti;
+      nodes.add((z, _iconSlab(slug, m: place(Offset(x, y - 22), z: z, rx: rx, ry: ry, scale: scale), rx: rx, ry: ry, size: 64, opacity: fade)));
+      nodes.add((z - 0.1, _pricePill(price, place(Offset(x, y + 22), z: z, scale: scale), fade * near)));
     }
     final tokRx = 0.2 + 0.05 * math.sin(now * 0.8), tokRy = 0.3 * math.sin(now * 0.5) - d * 0.9;
     nodes.add((
@@ -494,7 +502,7 @@ class _OrbitScene extends StatelessWidget {
         rx: tokRx,
         ry: tokRy,
         opacity: _span(t, 0, 0.3),
-        transform: place(Offset(0, -16 - 6 * math.sin(now * 1.2)), rx: tokRx, ry: tokRy, scale: 0.6 + 0.4 * _span(t, 0, 0.5, Curves.easeOutBack)),
+        transform: place(Offset(0, -24 - 6 * math.sin(now * 1.2)), rx: tokRx, ry: tokRy, scale: 0.6 + 0.4 * _span(t, 0, 0.5, Curves.easeOutBack)),
       ),
     ));
 
@@ -544,21 +552,8 @@ class _TrialScene extends StatelessWidget {
     final cardRx = 0.24 + 0.04 * math.sin(now * 0.7), cardRy = -0.34 + 0.07 * math.sin(now * 0.5) - d * 0.8;
     final note = _span(t, 0.62, 1, Curves.easeOutBack);
     final bellRx = 0.2, bellRy = 0.4 * math.sin(now * 0.9) - d * 1.2;
-    final orbs = _span(t, 0, 0.5);
 
     return _stage([
-      (
-        90,
-        Orb(color: const Color(0xFFFFB547), size: 54, opacity: orbs, transform: place(Offset(-128, -128 + 8 * math.sin(now)), z: 90)),
-      ),
-      (
-        -40,
-        Orb(color: const Color(0xFF8B5CFF), size: 26, opacity: orbs, transform: place(Offset(140, -40 + 6 * math.cos(now * 1.2)), z: -40)),
-      ),
-      (
-        150,
-        Orb(color: const Color(0xFFFF7A45), size: 30, opacity: orbs * 0.8, transform: place(Offset(-150, 70 + 5 * math.sin(now * 0.8)), z: 150)),
-      ),
       (
         0,
         Slab(
@@ -578,7 +573,7 @@ class _TrialScene extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
-                  _letter('Netflix', const Color(0xFFE50914), size: 22),
+                  _logoChip('netflix', 22),
                   const SizedBox(width: 8),
                   const Text('Netflix · free trial', style: TextStyle(color: kText, fontSize: 12.5, fontWeight: FontWeight.w600)),
                 ]),
@@ -678,7 +673,7 @@ class _ShortfallScene extends StatelessWidget {
 
   static const _balance = 42.67;
   static const _charges = [35.00, 11.99, 10.99, 8.99]; // 66.97 due → £24.30 short
-  static const _coins = ['−£35', '−£12', '−£11', '−£9'];
+  static const _coins = [('klarna', '−£35.00'), ('spotify', '−£11.99'), ('netflix', '−£10.99'), ('notion', '−£8.99')];
 
   @override
   Widget build(BuildContext context) {
@@ -739,30 +734,14 @@ class _ShortfallScene extends StatelessWidget {
     for (var k = 0; k < _coins.length; k++) {
       final p = _span(t, 0.12 + 0.11 * k, 0.5 + 0.11 * k, Curves.easeOutBack);
       final x = -114 + 76.0 * k;
-      final y = -126 + (k.isOdd ? -18 : 0) + 5 * math.sin(now * 1.3 + k);
-      final ry = 0.6 * math.sin(now * 1.1 + k * 1.7) - d;
+      final y = -138 + (k.isOdd ? -14 : 0) + 5 * math.sin(now * 1.3 + k);
+      final ry = 0.35 * math.sin(now * 1.1 + k * 1.7) - d;
       const rx = 0.25;
       final z = -10.0 - 12 * k;
-      nodes.add((
-        z,
-        Slab(
-          size: const Size.square(60),
-          radius: 30,
-          depth: 9,
-          rx: rx,
-          ry: ry,
-          edge: const Color(0xFF8A2232),
-          gloss: 0.42,
-          opacity: _span(t, 0.12 + 0.11 * k, 0.3 + 0.11 * k),
-          transform: place(Offset(x, y - (1 - p) * 220), z: z, rx: rx, ry: ry),
-          face: DecoratedBox(
-            decoration: const BoxDecoration(
-              gradient: RadialGradient(center: Alignment(-0.3, -0.4), colors: [Color(0xFFFFA49A), Color(0xFFFF5C6C), Color(0xFFC0182B)], stops: [0, 0.5, 1]),
-            ),
-            child: Center(child: Text(_coins[k], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14))),
-          ),
-        ),
-      ));
+      final fade = _span(t, 0.12 + 0.11 * k, 0.3 + 0.11 * k);
+      final yy = y - (1 - p) * 220;
+      nodes.add((z, _iconSlab(_coins[k].$1, m: place(Offset(x, yy), z: z, rx: rx, ry: ry), rx: rx, ry: ry, size: 58, opacity: fade)));
+      nodes.add((z - 0.1, _pricePill(_coins[k].$2, place(Offset(x, yy + 42), z: z), fade)));
     }
 
     nodes.add((
