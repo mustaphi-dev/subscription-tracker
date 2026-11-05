@@ -22,7 +22,11 @@ class MarkLightPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (opacity <= 0) return;
-    final pts = [for (final p in kMarkGroove) Offset(p.dx * size.width, p.dy * size.height)];
+    // Every other sample of the groove is plenty at splash size and halves the draw calls.
+    final pts = [
+      for (var i = 0; i < kMarkGroove.length; i += 2) Offset(kMarkGroove[i].dx * size.width, kMarkGroove[i].dy * size.height),
+      if (kMarkGroove.length.isEven) Offset(kMarkGroove.last.dx * size.width, kMarkGroove.last.dy * size.height),
+    ];
     final n = pts.length - 1;
     final groove = kMarkGrooveWidth * size.width;
 
