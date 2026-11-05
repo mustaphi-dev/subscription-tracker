@@ -664,7 +664,7 @@ class DaySheet extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
           child: Text(DateFormat('EEEE d MMMM').format(day), style: display(22)),
         ),
-        Flexible(child: SingleChildScrollView(child: ItemGroup(items))),
+        Flexible(child: SingleChildScrollView(child: ItemGroup(items, flat: true))),
         const SizedBox(height: 16),
       ]);
 }

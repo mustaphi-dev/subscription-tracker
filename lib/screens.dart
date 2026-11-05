@@ -134,10 +134,10 @@ class _CalendarState extends ConsumerState<TrialsCalendarTab> {
                             padding: EdgeInsets.symmetric(horizontal: 24),
                             child: Text('Nothing due on this day.', style: TextStyle(color: kMuted)),
                           )
-                        : ItemGroup(onDay.map((c) => c.item).toList(), color: Color.lerp(kSurface, kSurfaceHi, f)!),
+                        : ItemGroup(onDay.map((c) => c.item).toList(), flat: true),
                     if (trials.isNotEmpty) ...[
                       SectionHeader('Active trials', trailing: Text('${trials.length}', style: label)),
-                      ItemGroup(trials, color: Color.lerp(kSurface, kSurfaceHi, f)!),
+                      ItemGroup(trials, flat: true),
                     ],
                   ],
                 ),
@@ -845,7 +845,7 @@ class AlertsSheet extends ConsumerWidget {
             child: Text('Nothing due. We\'ll notify you 7 days, 3 days and 24 hours before any trial converts.', style: TextStyle(color: kMuted, height: 1.4)),
           )
         else
-          Flexible(child: SingleChildScrollView(child: ItemGroup(soon.map((c) => c.item).toSet().toList()))),
+          Flexible(child: SingleChildScrollView(child: ItemGroup(soon.map((c) => c.item).toSet().toList(), flat: true))),
         const SizedBox(height: 16),
       ],
     );
@@ -1096,7 +1096,7 @@ class ConfirmTrialScreen extends ConsumerWidget {
                   style: TextStyle(color: kMuted, height: 1.4),
                 ),
               ),
-              if (item == null) const Center(child: CircularProgressIndicator()) else ItemGroup([item]),
+              if (item == null) const Center(child: CircularProgressIndicator()) else ItemGroup([item], flat: true),
             ],
           ),
         ),

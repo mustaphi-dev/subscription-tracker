@@ -125,6 +125,8 @@ class _ItemRowState extends ConsumerState<ItemRow> {
       ),
       confirmDismiss: (_) async {
         HapticFeedback.mediumImpact();
+        final ok = await confirmCancel(context, i);
+        if (ok != true) return false;
         await setItemStatus(i.id, 'cancelled');
         if (context.mounted) showToast(context, '${i.merchant} marked as cancelled', closeSheets: false); // row is still animating out
         return true;
@@ -208,6 +210,7 @@ class _ItemRowState extends ConsumerState<ItemRow> {
               onPressed: () async {
                 HapticFeedback.mediumImpact();
                 final confirm = i.status == 'pending_confirmation';
+                if (!confirm && !await confirmCancel(context, i)) return;
                 await setItemStatus(i.id, confirm ? 'active' : 'cancelled');
                 if (mounted) showToast(context, confirm ? 'Trial confirmed — we\'ll remind you before it converts' : 'Trial cancelled, alerts silenced');
               },
@@ -242,6 +245,46 @@ class _ItemRowState extends ConsumerState<ItemRow> {
   }
 }
 
+/// Branded "are you sure" sheet. Marking cancelled only stops tracking, so the copy says so plainly.
+Future<bool> confirmCancel(BuildContext context, FinancialItem i) async {
+  final charge = i.isTrial
+      ? (i.postTrialAmount == null ? null : priceTag(i.postTrialAmount!, i.currency, i.cycle))
+      : priceTag(i.amount, i.currency, i.cycle);
+  final ok = await showSheet<bool>(
+    context,
+    Builder(
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          MerchantAvatar(i.merchant, size: 56),
+          const SizedBox(height: 16),
+          Text('Cancel ${i.merchant}?', textAlign: TextAlign.center, style: display(22)),
+          const SizedBox(height: 8),
+          Text(
+            'We\'ll stop tracking it and turn off its reminders. '
+            'This doesn\'t cancel it with ${i.merchant}${charge == null ? '.' : ', so make sure you have, or you\'ll still pay $charge.'}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: kMuted, height: 1.4),
+          ),
+          const SizedBox(height: 24),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: kCrimson, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Mark as cancelled'),
+          ),
+          const SizedBox(height: 4),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: kText, minimumSize: const Size.fromHeight(48)),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep it', style: TextStyle(fontWeight: FontWeight.w600)),
+          ),
+        ]),
+      ),
+    ),
+  );
+  return ok == true;
+}
+
 class _Tag extends StatelessWidget {
   const _Tag(this.text, this.color);
   final String text;
@@ -256,26 +299,26 @@ class _Tag extends StatelessWidget {
 
 /// Rows grouped in one solid surface with hairline dividers.
 class ItemGroup extends StatelessWidget {
-  const ItemGroup(this.items, {super.key, this.color = kSurface});
+  const ItemGroup(this.items, {super.key, this.flat = false});
   final List<FinancialItem> items;
 
-  /// Raise to kSurfaceHi when the group sits on a kSurface sheet.
-  final Color color;
+  /// Sheets list rows straight on the sheet, separated by lines; pages wrap them in a card.
+  final bool flat;
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(22),
-          child: Surface(
-            color: color,
-            padding: EdgeInsets.zero,
-            child: Column(children: [
-              for (var k = 0; k < items.length; k++) ...[
-                if (k > 0) const Divider(height: 1, indent: 70, color: kLine),
-                ItemRow(items[k]),
-              ],
-            ]),
-          ),
-        ),
-      );
+  Widget build(BuildContext context) {
+    final rows = Column(children: [
+      for (var k = 0; k < items.length; k++) ...[
+        if (k > 0) const Divider(height: 1, indent: 70, color: kLine),
+        ItemRow(items[k]),
+      ],
+    ]);
+    if (flat) return Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: rows);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: Surface(padding: EdgeInsets.zero, child: rows),
+      ),
+    );
+  }
 }
