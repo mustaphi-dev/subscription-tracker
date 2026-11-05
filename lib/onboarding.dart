@@ -185,14 +185,16 @@ class SceneClock extends ValueNotifier<double> {
 // slowly (scale + drift) so the screen never feels like a static poster.
 
 class _Page {
-  const _Page(this.name, this.title, this.tone, {this.dx = 0});
+  const _Page(this.name, this.title, this.tone, {this.size = 1});
   final String name, title;
 
   /// Darkest colour at the bottom of the render; the text scrim fades into it.
   final Color tone;
 
-  /// Horizontal nudge (fraction of screen width) for renders whose subject sits off-centre.
-  final double dx;
+  /// Scale for renders whose subject runs wider than the rest, so every object
+  /// keeps a margin from the screen edges. The render's own background matches
+  /// [tone], so a smaller render shows no seam.
+  final double size;
 
   /// First frame of the loop, shown instantly and whenever video can't play.
   String get still => 'assets/onboarding/$name.jpg';
@@ -202,7 +204,7 @@ class _Page {
 }
 
 const _pagesData = [
-  _Page('renewals', 'Every renewal,\nbefore it hits.', Color(0xFF0B0A15)),
+  _Page('renewals', 'Every renewal,\nbefore it hits.', Color(0xFF0B0A15), size: 0.86),
   _Page('trials', 'Trials end on\nyour terms.', Color(0xFF1E0A07)),
   _Page('shortfalls', 'See a shortfall\ncoming.', Color(0xFF160708)),
 ];
@@ -313,10 +315,10 @@ class _OnboardingState extends State<OnboardingScreen> with SingleTickerProvider
                   Opacity(
                     opacity: (1 - (pos - i).abs()).clamp(0.0, 1.0) * _span(intro, 0, 0.5),
                     child: Transform.translate(
-                      offset: Offset((_pagesData[i].dx - (pos - i) * 0.35) * w, 36 + 6 * math.sin(now * 0.6 + i)),
+                      offset: Offset(-(pos - i) * 0.35 * w, 36 + 6 * math.sin(now * 0.6 + i)),
                       child: Transform.scale(
                         alignment: const Alignment(0, -0.4),
-                        scale: 1.08 + 0.02 * math.sin(now * 0.35 + i * 2) + 0.06 * (1 - _span(intro, 0, 1)) + 0.05 * (pos - i).abs(),
+                        scale: _pagesData[i].size * (1.08 + 0.02 * math.sin(now * 0.35 + i * 2) + 0.06 * (1 - _span(intro, 0, 1)) + 0.05 * (pos - i).abs()),
                         // Full width so the whole composition shows; the bottom melts into the page tone.
                         child: Align(
                           alignment: Alignment.topCenter,
