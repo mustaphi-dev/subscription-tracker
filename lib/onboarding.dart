@@ -7,6 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
 
+import 'ribbon.dart';
 import 'ui.dart';
 
 /// Has this device seen onboarding? Loaded before runApp so the router can redirect synchronously.
@@ -29,15 +30,13 @@ Widget _rise(double r, Widget child, {double dy = 16}) => Opacity(
   child: Transform.translate(offset: Offset(0, (1 - r) * dy), child: child),
 );
 
-/// The app mark (from the icon art) with a soft radial edge, for dark backgrounds.
-const kMarkAsset = 'assets/brand/mark.webp';
-
 // ───────── Splash ─────────
 
-/// Cold-start brand moment layered over the app. It opens on exactly what the native
-/// launch screen shows (the mark, 200pt, centred on the app background) so there is no
-/// jump, then the mark blooms and lifts while the wordmark settles in beneath it, and the
-/// whole thing dissolves into the app. Tap to skip; reduced motion makes it a short fade.
+/// Cold-start brand moment layered over the app. The native launch screen is only the
+/// background colour; then the ribbon glides in from the edge of the screen, wraps round
+/// and its two ends meet with the half twist: the logo, tying itself. A soft glow answers
+/// the join, the wordmark writes itself in underneath, and everything dissolves into the
+/// app. Tap to skip; reduced motion shows the finished mark and fades.
 class SplashOverlay extends StatefulWidget {
   const SplashOverlay({super.key});
   @override
@@ -45,8 +44,13 @@ class SplashOverlay extends StatefulWidget {
 }
 
 class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateMixin {
-  late final _intro = AnimationController(vsync: this, duration: const Duration(milliseconds: 1800));
-  late final _exit = AnimationController(vsync: this, duration: const Duration(milliseconds: 550));
+  static const _length = Duration(milliseconds: 2600);
+
+  /// Fraction of the intro at which the ribbon's ends meet.
+  static const _tie = 0.54;
+
+  late final _intro = AnimationController(vsync: this, duration: _length);
+  late final _exit = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
   bool _started = false, _leaving = false, _gone = false;
 
   @override
@@ -54,14 +58,13 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
     super.didChangeDependencies();
     if (_started) return;
     _started = true;
-    precacheImage(const AssetImage(kMarkAsset), context);
     if (MediaQuery.disableAnimationsOf(context)) {
       _intro.value = 1;
-      Future.delayed(const Duration(milliseconds: 600), _leave);
+      Future.delayed(const Duration(milliseconds: 700), _leave);
       return;
     }
     _intro.forward().then((_) => _leave());
-    Future.delayed(const Duration(milliseconds: 380), () {
+    Future.delayed(_length * _tie, () {
       if (mounted && !_leaving) HapticFeedback.lightImpact();
     });
   }
@@ -85,80 +88,94 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
   @override
   Widget build(BuildContext context) {
     if (_gone) return const SizedBox.shrink();
-    return AnimatedBuilder(
-      animation: Listenable.merge([_intro, _exit]),
-      builder: (context, _) {
-        final t = _intro.value, e = Curves.easeInCubic.transform(_exit.value);
-        final bloom = _span(t, 0, 0.5);
-        final lift = _span(t, 0.32, 0.72, Curves.easeInOutCubic);
-        final word = _span(t, 0.4, 0.9);
+    return LayoutBuilder(
+      builder: (context, box) => AnimatedBuilder(
+        animation: Listenable.merge([_intro, _exit]),
+        builder: (context, _) {
+          final size = box.biggest;
+          final t = _intro.value, e = Curves.easeInCubic.transform(_exit.value);
+          final extent = math.min(size.width * 0.62, 260.0);
+          final markHeight = extent * Ribbon.bounds.height / Ribbon.bounds.width;
 
-        return IgnorePointer(
-          ignoring: _leaving,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _leave,
-            child: Opacity(
-              opacity: 1 - e,
-              child: ColoredBox(
-                color: kBg,
-                child: Stack(
-                  fit: StackFit.expand,
-                  alignment: Alignment.center,
-                  children: [
-                    // Light blooming out from behind the mark.
-                    Center(
-                      child: Transform.translate(
-                        offset: Offset(0, -40 * lift),
-                        child: Container(
-                          width: 520,
-                          height: 520,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: RadialGradient(
-                              colors: [
-                                const Color(0xFF7B4DFF).withValues(alpha: 0.30 * bloom),
-                                const Color(0xFF4B2BD6).withValues(alpha: 0.10 * bloom),
-                                const Color(0xFF4B2BD6).withValues(alpha: 0),
-                              ],
-                              stops: const [0, 0.45, 1],
+          // Glide in and tie (entrance computed before the lift so its start stays put).
+          final head = ribbonEntrance(t / _tie, size, extent);
+          final glow = _span(t, _tie - 0.06, _tie + 0.32);
+          final pop = math.sin(math.pi * _span(t, _tie, _tie + 0.2, Curves.easeOut));
+          final lift = _span(t, _tie + 0.04, _tie + 0.36, Curves.easeInOutCubic);
+          final shift = Offset(0, -30 * lift);
+          final scale = (1 + 0.045 * pop) * (1 + 0.22 * e);
+
+          // Wordmark: each letter fades up in turn, the word settling as it completes.
+          const word = 'Subtracker';
+          final w0 = _tie + 0.08;
+          final settle = _span(t, w0, w0 + 0.36);
+
+          return IgnorePointer(
+            ignoring: _leaving,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _leave,
+              child: Opacity(
+                opacity: 1 - e,
+                child: ColoredBox(
+                  color: kBg,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      // Light gathering behind the loop as it closes.
+                      Center(
+                        child: Transform.translate(
+                          offset: shift,
+                          child: Container(
+                            width: extent * 2.3,
+                            height: extent * 2.3,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: RadialGradient(
+                                colors: [
+                                  const Color(0xFF7B4DFF).withValues(alpha: (0.26 + 0.08 * pop) * glow),
+                                  const Color(0xFF4B2BD6).withValues(alpha: 0.09 * glow),
+                                  const Color(0xFF4B2BD6).withValues(alpha: 0),
+                                ],
+                                stops: const [0, 0.42, 1],
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                    Center(
-                      child: Transform.translate(
-                        offset: Offset(0, -40 * lift),
-                        child: Transform.rotate(
-                          angle: -0.08 * (1 - _span(t, 0, 0.8)),
-                          child: Transform.scale(
-                            scale: (1 + 0.1 * _span(t, 0, 0.6, Curves.easeOutBack)) * (1 + 0.35 * e),
-                            child: Image.asset(kMarkAsset, width: 200, height: 200, filterQuality: FilterQuality.medium),
+                      Transform.scale(
+                        scale: scale,
+                        origin: shift,
+                        child: CustomPaint(painter: RibbonPainter(head: head, extent: extent, shift: shift)),
+                      ),
+                      Center(
+                        child: Transform.translate(
+                          offset: shift + Offset(0, markHeight / 2 + 44 + 10 * (1 - settle)),
+                          child: Opacity(
+                            opacity: 1 - 0.6 * e,
+                            child: Text.rich(
+                              TextSpan(
+                                children: [
+                                  for (var i = 0; i < word.length; i++)
+                                    TextSpan(
+                                      text: word[i],
+                                      style: TextStyle(color: Colors.white.withValues(alpha: _span(t, w0 + 0.024 * i, w0 + 0.024 * i + 0.16))),
+                                    ),
+                                ],
+                              ),
+                              style: display(30, weight: FontWeight.w600).copyWith(letterSpacing: -0.9 + 2.4 * (1 - settle)),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    // Wordmark: tracks in from wide letter-spacing as it fades up.
-                    Center(
-                      child: Transform.translate(
-                        offset: Offset(0, 96 + 12 * (1 - word)),
-                        child: Opacity(
-                          opacity: word,
-                          child: Text(
-                            'Subtracker',
-                            style: display(30, weight: FontWeight.w600).copyWith(letterSpacing: -0.9 + 9 * (1 - word)),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
@@ -204,7 +221,7 @@ class _Page {
 }
 
 const _pagesData = [
-  _Page('renewals', 'Every renewal,\nbefore it hits.', Color(0xFF0B0A15), size: 0.86),
+  _Page('renewals', 'Every renewal,\nbefore it hits.', Color(0xFF0B0A15)),
   _Page('trials', 'Trials end on\nyour terms.', Color(0xFF1E0A07)),
   _Page('shortfalls', 'See a shortfall\ncoming.', Color(0xFF160708)),
 ];
