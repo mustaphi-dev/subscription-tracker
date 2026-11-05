@@ -627,7 +627,7 @@ class _NextDays extends ConsumerWidget {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       SectionHeader('Next 14 days', trailing: Text('${money(total, base)} out', style: const TextStyle(color: kMuted, fontSize: 13, fontFeatures: tabular))),
       SizedBox(
-        height: 104,
+        height: 76,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           physics: const BouncingScrollPhysics(),
@@ -645,37 +645,34 @@ class _NextDays extends ConsumerWidget {
                 showSheet(context, DaySheet(day: day, items: onDay.map((c) => c.item).toList()));
               },
               child: Container(
-                width: 56,
-                padding: const EdgeInsets.symmetric(vertical: 10),
+                width: 52,
+                padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
                   color: isToday ? kText : kSurface,
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: isToday ? kText : kLine),
                 ),
-                child: Column(children: [
+                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                   Text(DateFormat('E').format(day).substring(0, 2), style: TextStyle(fontSize: 11, color: isToday ? kBg.withValues(alpha: 0.6) : kMuted)),
-                  const SizedBox(height: 2),
                   Text('${day.day}', style: display(18, color: isToday ? kBg : kText)),
-                  const SizedBox(height: 6),
+                  // One compact slot: the day's spend if any, otherwise dots for income/other items.
                   SizedBox(
-                    height: 6,
-                    child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      for (final c in onDay.take(4))
-                        Container(
-                          width: 6,
-                          height: 6,
-                          margin: const EdgeInsets.symmetric(horizontal: 1),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: c.amount > 0 ? kMint : (sources[c.item.sourceId] ?? kAccent),
-                          ),
-                        ),
-                    ]),
-                  ),
-                  const Spacer(),
-                  Text(
-                    spend == 0 ? '' : compactMoney(spend, base),
-                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: isToday ? kBg : kMuted, fontFeatures: tabular),
+                    height: 13,
+                    child: spend > 0
+                        ? Text(compactMoney(spend, base),
+                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: isToday ? kBg : kMuted, fontFeatures: tabular))
+                        : Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            for (final c in onDay.take(4))
+                              Container(
+                                width: 5,
+                                height: 5,
+                                margin: const EdgeInsets.symmetric(horizontal: 1),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: c.amount > 0 ? kMint : (sources[c.item.sourceId] ?? kAccent),
+                                ),
+                              ),
+                          ]),
                   ),
                 ]),
               ),
@@ -743,13 +740,13 @@ class _TrialRings extends StatelessWidget {
                     ]),
                     const Spacer(),
                     Text(t.merchant, maxLines: 1, overflow: TextOverflow.ellipsis, style: label),
-                    LiveCountdown(t.trialEnd!, style: display(20, color: urgent ? kCrimson : kText)),
+                    Text(dueLabel(t.trialEnd!), style: display(20, color: urgent ? kCrimson : kText)),
                     const SizedBox(height: 10),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(color: (known ? tone : kMuted).withValues(alpha: 0.14), borderRadius: BorderRadius.circular(99)),
                       child: Text(
-                        known ? 'Then ${money(t.postTrialAmount!, t.currency)}' : 'Charge unknown',
+                        known ? 'Then ${priceTag(t.postTrialAmount!, t.currency, t.cycle)}' : 'Charge unknown',
                         style: TextStyle(color: known ? tone : kMuted, fontSize: 12, fontWeight: FontWeight.w600, fontFeatures: tabular),
                       ),
                     ),

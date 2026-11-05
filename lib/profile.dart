@@ -139,7 +139,7 @@ class _ProfileState extends ConsumerState<ProfileScreen> {
             SliverToBoxAdapter(
               child: group(footer: 'The app locks ${lockTimeout.inSeconds} seconds after you leave it.', [
                 row(Icons.face_unlock_rounded, 'Unlock with Face ID',
-                    sub: 'Falls back to your 6-digit PIN',
+                    sub: 'Unlock the app by looking at your phone',
                     trailing: Switch(
                       value: _bio ?? true,
                       onChanged: (v) async {
@@ -149,7 +149,7 @@ class _ProfileState extends ConsumerState<ProfileScreen> {
                         await db.from('profiles').update({'biometric_enabled': v}).eq('id', user!.id);
                       },
                     )),
-                row(Icons.pin_rounded, 'Change PIN', onTap: _changePin),
+                row(Icons.pin_rounded, 'Change PIN', sub: 'The 6-digit code that unlocks the app', onTap: _changePin),
               ]),
             ),
             const SliverToBoxAdapter(child: SectionHeader('Trial emails')),

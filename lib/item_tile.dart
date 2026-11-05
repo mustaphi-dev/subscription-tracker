@@ -27,6 +27,18 @@ String countdown(Duration d) {
   return d.inDays > 0 ? '${d.inDays}d ${two(h)}h ${two(m)}m' : '${two(h)}:${two(m)}:${two(s)}';
 }
 
+/// Rounded, calendar-based label for glanceable cards: Today, Tomorrow, In 5 days, In 2 weeks, In 3 months.
+String dueLabel(DateTime when, [DateTime? now]) {
+  final n = now ?? DateTime.now();
+  final days = DateUtils.dateOnly(when).difference(DateUtils.dateOnly(n)).inDays;
+  if (days < 0) return 'Ended';
+  if (days == 0) return 'Today';
+  if (days == 1) return 'Tomorrow';
+  if (days < 14) return 'In $days days';
+  if (days < 60) return 'In ${(days / 7).round()} weeks';
+  return 'In ${(days / 30).round()} months';
+}
+
 class LiveCountdown extends ConsumerWidget {
   const LiveCountdown(this.until, {super.key, this.style});
   final DateTime until;

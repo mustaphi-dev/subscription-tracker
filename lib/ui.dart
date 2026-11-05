@@ -106,6 +106,13 @@ const caption = TextStyle(color: kMuted, fontSize: 12);
 
 String money(num amount, String ccy) => NumberFormat.simpleCurrency(locale: 'en_GB', name: ccy).format(amount);
 
+/// Short price for chips: symbol, no `.00` on whole amounts, optional cycle. `£20/mo`, `GH₵78.50/qtr`.
+String priceTag(num amount, String ccy, [String? cycle]) {
+  final symbol = NumberFormat.simpleCurrency(locale: 'en_GB', name: ccy).currencySymbol;
+  final n = NumberFormat(amount % 1 == 0 ? '#,##0' : '#,##0.00', 'en_GB').format(amount);
+  return '$symbol$n${const {'weekly': '/wk', 'monthly': '/mo', 'quarterly': '/qtr', 'yearly': '/yr'}[cycle] ?? ''}';
+}
+
 String compactMoney(num amount, String ccy) =>
     NumberFormat.compactSimpleCurrency(locale: 'en_GB', name: ccy, decimalDigits: amount.abs() < 1000 ? 0 : 1).format(amount);
 
