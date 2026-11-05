@@ -7,7 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
 
-import 'ribbon.dart';
+import 'brand_mark.dart';
 import 'ui.dart';
 
 /// Has this device seen onboarding? Loaded before runApp so the router can redirect synchronously.
@@ -33,10 +33,10 @@ Widget _rise(double r, Widget child, {double dy = 16}) => Opacity(
 // ───────── Splash ─────────
 
 /// Cold-start brand moment layered over the app. The native launch screen is only the
-/// background colour; then the ribbon glides in from the edge of the screen, wraps round
-/// and its two ends meet with the half twist: the logo, tying itself. A soft glow answers
-/// the join, the wordmark writes itself in underneath, and everything dissolves into the
-/// app. Tap to skip; reduced motion shows the finished mark and fades.
+/// background colour. A violet light traces an S out of the dark, the chrome S (the app
+/// icon's mark) materialises around it with the light settling into its groove, a sheen
+/// crosses the metal, the wordmark writes itself in underneath, and everything dissolves
+/// into the app. Tap to skip; reduced motion shows the finished mark and fades.
 class SplashOverlay extends StatefulWidget {
   const SplashOverlay({super.key});
   @override
@@ -44,10 +44,10 @@ class SplashOverlay extends StatefulWidget {
 }
 
 class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateMixin {
-  static const _length = Duration(milliseconds: 2600);
+  static const _length = Duration(milliseconds: 2500);
 
-  /// Fraction of the intro at which the ribbon's ends meet.
-  static const _tie = 0.54;
+  /// Fraction of the intro at which the chrome S has fully appeared.
+  static const _traced = 0.6;
 
   late final _intro = AnimationController(vsync: this, duration: _length);
   late final _exit = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
@@ -58,15 +58,25 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
     super.didChangeDependencies();
     if (_started) return;
     _started = true;
-    if (MediaQuery.disableAnimationsOf(context)) {
-      _intro.value = 1;
-      Future.delayed(const Duration(milliseconds: 700), _leave);
-      return;
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    // Start once the chrome S is decoded (or after a beat regardless), so it never pops in late.
+    var begun = false;
+    void begin() {
+      if (begun || !mounted) return;
+      begun = true;
+      if (reduced) {
+        _intro.value = 1;
+        Future.delayed(const Duration(milliseconds: 700), _leave);
+        return;
+      }
+      _intro.forward().then((_) => _leave());
+      Future.delayed(_length * _traced, () {
+        if (mounted && !_leaving) HapticFeedback.lightImpact();
+      });
     }
-    _intro.forward().then((_) => _leave());
-    Future.delayed(_length * _tie, () {
-      if (mounted && !_leaving) HapticFeedback.lightImpact();
-    });
+
+    precacheImage(const AssetImage(kMarkAsset), context).whenComplete(begin);
+    Future.delayed(const Duration(milliseconds: 600), begin);
   }
 
   void _leave() {
@@ -88,94 +98,97 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
   @override
   Widget build(BuildContext context) {
     if (_gone) return const SizedBox.shrink();
-    return LayoutBuilder(
-      builder: (context, box) => AnimatedBuilder(
-        animation: Listenable.merge([_intro, _exit]),
-        builder: (context, _) {
-          final size = box.biggest;
-          final t = _intro.value, e = Curves.easeInCubic.transform(_exit.value);
-          final extent = math.min(size.width * 0.62, 260.0);
-          final markHeight = extent * Ribbon.bounds.height / Ribbon.bounds.width;
+    return AnimatedBuilder(
+      animation: Listenable.merge([_intro, _exit]),
+      builder: (context, _) {
+        final t = _intro.value, e = Curves.easeInCubic.transform(_exit.value);
+        final size = math.min(MediaQuery.sizeOf(context).width * 0.5, 210.0);
 
-          // Glide in and tie (entrance computed before the lift so its start stays put).
-          final head = ribbonEntrance(t / _tie, size, extent);
-          final glow = _span(t, _tie - 0.06, _tie + 0.32);
-          final pop = math.sin(math.pi * _span(t, _tie, _tie + 0.2, Curves.easeOut));
-          final lift = _span(t, _tie + 0.04, _tie + 0.36, Curves.easeInOutCubic);
-          final shift = Offset(0, -30 * lift);
-          final scale = (1 + 0.045 * pop) * (1 + 0.22 * e);
+        final run = _span(t, 0.03, 0.46, Curves.easeInOutCubic);            // light traces the S
+        final settle = _span(t, 0.3, _traced);                              // ...and stays lit
+        final rise = _span(t, 0.32, _traced);                               // chrome materialises round it
+        final glow = _span(t, 0.4, _traced + 0.25);
+        final lift = _span(t, _traced, 0.9, Curves.easeInOutCubic);
+        final shift = Offset(0, -26 * lift);
 
-          // Wordmark: each letter fades up in turn, the word settling as it completes.
-          const word = 'Subtracker';
-          final w0 = _tie + 0.08;
-          final settle = _span(t, w0, w0 + 0.36);
+        const word = 'Subtracker';
+        final w0 = _traced + 0.02;
+        final wordIn = _span(t, w0, w0 + 0.34);
 
-          return IgnorePointer(
-            ignoring: _leaving,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: _leave,
-              child: Opacity(
-                opacity: 1 - e,
-                child: ColoredBox(
-                  color: kBg,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      // Light gathering behind the loop as it closes.
-                      Center(
-                        child: Transform.translate(
-                          offset: shift,
-                          child: Container(
-                            width: extent * 2.3,
-                            height: extent * 2.3,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: RadialGradient(
-                                colors: [
-                                  const Color(0xFF7B4DFF).withValues(alpha: (0.26 + 0.08 * pop) * glow),
-                                  const Color(0xFF4B2BD6).withValues(alpha: 0.09 * glow),
-                                  const Color(0xFF4B2BD6).withValues(alpha: 0),
-                                ],
-                                stops: const [0, 0.42, 1],
-                              ),
+        return IgnorePointer(
+          ignoring: _leaving,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _leave,
+            child: Opacity(
+              opacity: 1 - e,
+              child: ColoredBox(
+                color: kBg,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Violet light pooling behind the S once it is lit.
+                    Center(
+                      child: Transform.translate(
+                        offset: shift,
+                        child: Container(
+                          width: size * 2.8,
+                          height: size * 2.8,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              colors: [
+                                const Color(0xFF7B4DFF).withValues(alpha: 0.28 * glow),
+                                const Color(0xFF4B2BD6).withValues(alpha: 0.08 * glow),
+                                const Color(0xFF4B2BD6).withValues(alpha: 0),
+                              ],
+                              stops: const [0, 0.4, 1],
                             ),
                           ),
                         ),
                       ),
-                      Transform.scale(
-                        scale: scale,
-                        origin: shift,
-                        child: CustomPaint(painter: RibbonPainter(head: head, extent: extent, shift: shift)),
-                      ),
-                      Center(
-                        child: Transform.translate(
-                          offset: shift + Offset(0, markHeight / 2 + 44 + 10 * (1 - settle)),
-                          child: Opacity(
-                            opacity: 1 - 0.6 * e,
-                            child: Text.rich(
-                              TextSpan(
-                                children: [
-                                  for (var i = 0; i < word.length; i++)
-                                    TextSpan(
-                                      text: word[i],
-                                      style: TextStyle(color: Colors.white.withValues(alpha: _span(t, w0 + 0.024 * i, w0 + 0.024 * i + 0.16))),
-                                    ),
-                                ],
-                              ),
-                              style: display(30, weight: FontWeight.w600).copyWith(letterSpacing: -0.9 + 2.4 * (1 - settle)),
-                            ),
+                    ),
+                    Center(
+                      child: Transform.translate(
+                        offset: shift,
+                        child: Transform.scale(
+                          scale: (0.96 + 0.04 * Curves.easeOutCubic.transform(rise)) * (1 + 0.18 * e),
+                          child: BrandMark(
+                            size: size,
+                            chrome: rise,
+                            head: run * 1.45,
+                            tail: 0.45,
+                            settle: settle,
+                            sheen: _span(t, _traced - 0.06, _traced + 0.3, Curves.easeInOut),
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                    // Wordmark: each letter fades up in turn, the word settling as it completes.
+                    Center(
+                      child: Transform.translate(
+                        offset: shift + Offset(0, size / 2 + 34 + 10 * (1 - wordIn)),
+                        child: Text.rich(
+                          TextSpan(
+                            children: [
+                              for (var i = 0; i < word.length; i++)
+                                TextSpan(
+                                  text: word[i],
+                                  style: TextStyle(color: Colors.white.withValues(alpha: _span(t, w0 + 0.022 * i, w0 + 0.022 * i + 0.14))),
+                                ),
+                            ],
+                          ),
+                          style: display(30, weight: FontWeight.w600).copyWith(letterSpacing: -0.9 + 2.4 * (1 - wordIn)),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -202,16 +215,11 @@ class SceneClock extends ValueNotifier<double> {
 // slowly (scale + drift) so the screen never feels like a static poster.
 
 class _Page {
-  const _Page(this.name, this.title, this.tone, {this.size = 1});
+  const _Page(this.name, this.title, this.tone);
   final String name, title;
 
   /// Darkest colour at the bottom of the render; the text scrim fades into it.
   final Color tone;
-
-  /// Scale for renders whose subject runs wider than the rest, so every object
-  /// keeps a margin from the screen edges. The render's own background matches
-  /// [tone], so a smaller render shows no seam.
-  final double size;
 
   /// First frame of the loop, shown instantly and whenever video can't play.
   String get still => 'assets/onboarding/$name.jpg';
@@ -335,7 +343,7 @@ class _OnboardingState extends State<OnboardingScreen> with SingleTickerProvider
                       offset: Offset(-(pos - i) * 0.35 * w, 36 + 6 * math.sin(now * 0.6 + i)),
                       child: Transform.scale(
                         alignment: const Alignment(0, -0.4),
-                        scale: _pagesData[i].size * (1.08 + 0.02 * math.sin(now * 0.35 + i * 2) + 0.06 * (1 - _span(intro, 0, 1)) + 0.05 * (pos - i).abs()),
+                        scale: (1.08 + 0.02 * math.sin(now * 0.35 + i * 2) + 0.06 * (1 - _span(intro, 0, 1)) + 0.05 * (pos - i).abs()),
                         // Full width so the whole composition shows; the bottom melts into the page tone.
                         child: Align(
                           alignment: Alignment.topCenter,
