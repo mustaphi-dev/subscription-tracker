@@ -77,65 +77,74 @@ class Slab extends StatelessWidget {
     double c(double v) => v.clamp(0.0, 1.0);
 
     Widget layer(double dz, Widget child) => Transform(
-          transform: transform.clone()..translateByDouble(0, 0, dz, 1),
-          alignment: Alignment.center,
-          child: SizedBox.fromSize(size: size, child: child),
-        );
+      transform: transform.clone()..translateByDouble(0, 0, dz, 1),
+      alignment: Alignment.center,
+      child: SizedBox.fromSize(size: size, child: child),
+    );
 
     return Opacity(
       opacity: opacity.clamp(0.0, 1.0),
-      child: Stack(alignment: Alignment.center, clipBehavior: Clip.none, children: [
-        // Side walls: stacked layers from the back, darkening with depth.
-        for (var k = layers; k >= 1; k--)
+      child: Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: [
+          // Side walls: stacked layers from the back, darkening with depth.
+          for (var k = layers; k >= 1; k--)
+            layer(
+              depth * k / layers,
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: shape,
+                  color: Color.lerp(edge, Colors.black, 0.45 * k / layers),
+                  boxShadow: k == layers ? [BoxShadow(color: Colors.black.withValues(alpha: 0.45), blurRadius: 40, offset: const Offset(0, 28))] : null,
+                ),
+              ),
+            ),
           layer(
-            depth * k / layers,
-            DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: shape,
-                color: Color.lerp(edge, Colors.black, 0.45 * k / layers),
-                boxShadow: k == layers
-                    ? [BoxShadow(color: Colors.black.withValues(alpha: 0.45), blurRadius: 40, offset: const Offset(0, 28))]
-                    : null,
+            0,
+            ClipRRect(
+              borderRadius: shape,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  face,
+                  // Specular sweep.
+                  IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Colors.white.withValues(alpha: 0),
+                            Colors.white.withValues(alpha: gloss),
+                            Colors.white.withValues(alpha: 0),
+                          ],
+                          stops: [c(s - 0.22), c(s), c(s + 0.22)],
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Bevel: a hairline that's bright on the lit top edge.
+                  IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: shape,
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.14), width: 1),
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.center,
+                          colors: [Colors.white.withValues(alpha: 0.10), Colors.white.withValues(alpha: 0)],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-        layer(
-          0,
-          ClipRRect(
-            borderRadius: shape,
-            child: Stack(fit: StackFit.expand, children: [
-              face,
-              // Specular sweep.
-              IgnorePointer(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Colors.white.withValues(alpha: 0), Colors.white.withValues(alpha: gloss), Colors.white.withValues(alpha: 0)],
-                      stops: [c(s - 0.22), c(s), c(s + 0.22)],
-                    ),
-                  ),
-                ),
-              ),
-              // Bevel: a hairline that's bright on the lit top edge.
-              IgnorePointer(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: shape,
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.14), width: 1),
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.center,
-                      colors: [Colors.white.withValues(alpha: 0.10), Colors.white.withValues(alpha: 0)],
-                    ),
-                  ),
-                ),
-              ),
-            ]),
-          ),
-        ),
-      ]),
+        ],
+      ),
     );
   }
 }
@@ -162,22 +171,22 @@ class IconToken extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Slab(
-        size: Size.square(size),
-        transform: transform,
-        rx: rx,
-        ry: ry,
-        radius: size * 0.28,
-        depth: size * 0.16,
-        edge: edge,
-        gloss: 0.38,
-        opacity: opacity,
-        face: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: colors),
-          ),
-          child: Icon(icon, size: size * 0.55, color: iconColor),
-        ),
-      );
+    size: Size.square(size),
+    transform: transform,
+    rx: rx,
+    ry: ry,
+    radius: size * 0.28,
+    depth: size * 0.16,
+    edge: edge,
+    gloss: 0.38,
+    opacity: opacity,
+    face: DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: colors),
+      ),
+      child: Icon(icon, size: size * 0.55, color: iconColor),
+    ),
+  );
 }
 
 /// Slow-moving coloured light behind a scene, with drifting motes and a fade to the page
@@ -192,8 +201,8 @@ class Aurora extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => RepaintBoundary(
-        child: CustomPaint(painter: _AuroraPainter(clock, colors, intensity, focus), size: Size.infinite),
-      );
+    child: CustomPaint(painter: _AuroraPainter(clock, colors, intensity, focus), size: Size.infinite),
+  );
 }
 
 class _AuroraPainter extends CustomPainter {
@@ -218,23 +227,21 @@ class _AuroraPainter extends CustomPainter {
 
     for (var i = 0; i < colors.length; i++) {
       final ph = i * 2.1;
-      final center = c +
-          Offset(
-            w * 0.28 * math.sin(t * 0.21 + ph),
-            h * 0.10 * math.cos(t * 0.17 + ph * 1.3) + (i - 1) * h * 0.05,
-          );
+      final center = c + Offset(w * 0.28 * math.sin(t * 0.21 + ph), h * 0.10 * math.cos(t * 0.17 + ph * 1.3) + (i - 1) * h * 0.05);
       final r = w * (0.85 + 0.12 * math.sin(t * 0.3 + ph));
       canvas.drawCircle(
         center,
         r,
         Paint()
           ..blendMode = BlendMode.plus
-          ..shader = RadialGradient(colors: [
-            colors[i].withValues(alpha: 0.42 * intensity),
-            colors[i].withValues(alpha: 0.12 * intensity),
-            colors[i].withValues(alpha: 0),
-          ], stops: const [0, 0.45, 1])
-              .createShader(Rect.fromCircle(center: center, radius: r)),
+          ..shader = RadialGradient(
+            colors: [
+              colors[i].withValues(alpha: 0.42 * intensity),
+              colors[i].withValues(alpha: 0.12 * intensity),
+              colors[i].withValues(alpha: 0),
+            ],
+            stops: const [0, 0.45, 1],
+          ).createShader(Rect.fromCircle(center: center, radius: r)),
       );
     }
 
@@ -262,67 +269,4 @@ class _AuroraPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_AuroraPainter o) => o.intensity != intensity || !listEquals(o.colors, colors) || o.focus != focus;
-}
-
-/// A tilted orbit drawn in perspective around the scene centre. Paint it twice, once with
-/// [front] false behind the subject and once with [front] true in front of it, so the
-/// ring and its satellites pass behind and in front.
-class OrbitRing extends CustomPainter {
-  OrbitRing({
-    required this.radius,
-    required this.tilt,
-    required this.spin,
-    required this.front,
-    this.progress = 1,
-    this.satellites = const [],
-    this.color = Colors.white,
-    this.xScale = 1,
-  });
-  final double radius, tilt, spin, progress;
-
-  /// Squash the orbit horizontally (1 = circle) so it fits narrow stages.
-  final double xScale;
-  final bool front;
-  final List<Color> satellites;
-  final Color color;
-
-  (Offset, double) _project(double a) {
-    final x = radius * xScale * math.cos(a), z0 = radius * math.sin(a);
-    final y = -z0 * math.sin(tilt), z = z0 * math.cos(tilt);
-    final w = 1 + kPerspective * z;
-    return (Offset(x / w, y / w), z);
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (progress <= 0) return;
-    final c = size.center(Offset.zero);
-    final stroke = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2
-      ..strokeCap = StrokeCap.round;
-    const steps = 160;
-    final sweep = math.pi * 2 * progress;
-    for (var k = 0; k < steps; k++) {
-      final a0 = spin + sweep * k / steps, a1 = spin + sweep * (k + 1) / steps;
-      final (p0, z0) = _project(a0);
-      final (p1, _) = _project(a1);
-      if ((z0 < 0) != front) continue;
-      // Brighter nearer the viewer.
-      stroke.color = color.withValues(alpha: (0.16 + 0.22 * (-z0 / radius).clamp(0, 1)));
-      canvas.drawLine(c + p0, c + p1, stroke);
-    }
-    for (var i = 0; i < satellites.length; i++) {
-      final a = spin * 1.6 + i * math.pi * 2 / satellites.length;
-      if ((a - spin) % (math.pi * 2) > sweep) continue;
-      final (p, z) = _project(a);
-      if ((z < 0) != front) continue;
-      final s = 4.5 / (1 + kPerspective * z);
-      canvas.drawCircle(c + p, s * 3, Paint()..color = satellites[i].withValues(alpha: 0.25)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
-      canvas.drawCircle(c + p, s, Paint()..color = satellites[i]);
-    }
-  }
-
-  @override
-  bool shouldRepaint(OrbitRing o) => o.spin != spin || o.progress != progress || o.tilt != tilt || o.front != front;
 }

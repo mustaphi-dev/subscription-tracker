@@ -76,9 +76,9 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # Brand marks for onboarding art, rendered from Simple Icons (CC0). Trademarks belong to their owners.
+  # Onboarding hero renders (original, AI-generated for this app; see PR #1).
   assets:
-    - assets/brands/
+    - assets/onboarding/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
