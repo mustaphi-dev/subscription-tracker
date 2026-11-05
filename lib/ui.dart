@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
-import 'package:sprung/sprung.dart';
 
 import 'brands.dart';
 import 'data.dart';
@@ -40,8 +39,8 @@ extension SourceLook on PaymentSource {
   Color get color => providerColors[provider] ?? HSLColor.fromAHSL(1, (bank.toLowerCase().hashCode % 360).abs().toDouble(), 0.55, 0.6).toColor();
 }
 
-final springOut = Sprung.overDamped;
-final springBounce = Sprung.underDamped;
+const springOut = Curves.easeOutCubic;
+const springBounce = Curves.easeOutBack;
 const tabular = [FontFeature.tabularFigures()];
 
 ThemeData buildTheme() {

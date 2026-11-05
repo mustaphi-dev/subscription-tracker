@@ -85,7 +85,7 @@ class ShellScreen extends ConsumerWidget {
                     ),
                     const SizedBox(width: 12),
                     Pressable(
-                      onTap: () => showAddSheet(context),
+                      onTap: () => showSheet(context, const _AddSheet()),
                       child: Glass(
                         oval: true,
                         child: SizedBox.square(
@@ -567,37 +567,6 @@ class AccountStrip extends ConsumerWidget {
   }
 }
 
-/// Dashed-outline placeholder card ("add" affordance).
-class DottedCard extends StatelessWidget {
-  const DottedCard({super.key, required this.child, this.width});
-  final Widget child;
-  final double? width;
-  @override
-  Widget build(BuildContext context) => CustomPaint(
-        painter: _Dashes(),
-        child: SizedBox(width: width, height: double.infinity, child: child),
-      );
-}
-
-class _Dashes extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final path = Path()..addRRect(RRect.fromRectAndRadius((Offset.zero & size).deflate(0.5), const Radius.circular(20)));
-    final p = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2
-      ..color = kFaint;
-    for (final m in path.computeMetrics()) {
-      for (var d = 0.0; d < m.length; d += 9) {
-        canvas.drawPath(m.extractPath(d, d + 5), p);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_Dashes old) => false;
-}
-
 class _ClearFilter extends StatelessWidget {
   const _ClearFilter({required this.onTap});
   final VoidCallback onTap;
@@ -857,8 +826,6 @@ Future<void> scanReceipt(BuildContext context) async {
     if (context.mounted) showError(context, 'Scan failed: ${functionError(e)}');
   }
 }
-
-Future<void> showAddSheet(BuildContext context) => showSheet(context, const _AddSheet());
 
 class _AddSheet extends StatelessWidget {
   const _AddSheet();

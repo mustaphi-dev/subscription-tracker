@@ -117,18 +117,14 @@ List<String> _words(String name) => name.toLowerCase().split(RegExp(r'[^a-z0-9]+
   return brand.length < 2 ? null : (domain: null, name: brand);
 }
 
-final _urlCache = <String, String?>{};
-
 /// Logo URL at [px] physical pixels, or null when no key is configured or the name is unusable.
 String? logoUrl(String name, int px) {
   if (_key.isEmpty) return null;
-  return _urlCache.putIfAbsent('$name@$px', () {
-    final q = logoQuery(name);
-    if (q == null) return null;
-    final path = q.domain ?? 'name/${Uri.encodeComponent(q.name!)}';
-    // fallback=404: unknown brands fail instead of returning a generic monogram, so our own letter tile shows.
-    return 'https://img.logo.dev/$path?token=$_key&size=$px&format=png&fallback=404';
-  });
+  final q = logoQuery(name);
+  if (q == null) return null;
+  final path = q.domain ?? 'name/${Uri.encodeComponent(q.name!)}';
+  // fallback=404: unknown brands fail instead of returning a generic monogram, so our own letter tile shows.
+  return 'https://img.logo.dev/$path?token=$_key&size=$px&format=png&fallback=404';
 }
 
 /// Rounded logo for [name]; shows [fallback] while loading, offline, or when there's no logo.
