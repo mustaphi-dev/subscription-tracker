@@ -204,7 +204,7 @@ class _Page {
 const _pagesData = [
   _Page('renewals', 'Every renewal,\nbefore it hits.', Color(0xFF0B0A15)),
   _Page('trials', 'Trials end on\nyour terms.', Color(0xFF1E0A07)),
-  _Page('shortfalls', 'See a shortfall\ncoming.', Color(0xFF160708), dx: -0.1),
+  _Page('shortfalls', 'See a shortfall\ncoming.', Color(0xFF160708)),
 ];
 
 class OnboardingScreen extends StatefulWidget {
