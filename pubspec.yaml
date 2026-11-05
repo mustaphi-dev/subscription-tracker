@@ -53,6 +53,7 @@ dependencies:
   fl_chart: ^1.3.0
   cached_network_image: ^3.4.1
   google_fonts: ^8.2.1
+  video_player: ^2.14.1
 
 dev_dependencies:
   flutter_test:
@@ -76,8 +77,9 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # Onboarding hero renders (original, AI-generated for this app; see PR #1).
+  # Brand art and onboarding loops: original renders generated for this app (see PR #1).
   assets:
+    - assets/brand/
     - assets/onboarding/
 
   # To add assets to your application, add an assets section, like this:
