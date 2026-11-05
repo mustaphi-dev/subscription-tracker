@@ -1,11 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modify this file to customize your launch splash screen -->
+<!-- Background only: the in-app splash draws the ribbon tying itself into the logo. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/splash_bg" />
 
-    <item>
-        <bitmap
-            android:gravity="center"
-            android:src="@drawable/launch_mark" />
-    </item>
 </layer-list>
