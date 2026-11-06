@@ -1,30 +1,62 @@
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'countries.dart';
 import 'data.dart';
 import 'ui.dart';
 
 /// Country picker. Shown once after sign-up (sets the display currency too), and from
-/// Profile to change it later (country only).
-class CountryScreen extends StatefulWidget {
+/// Profile to change it later (then it asks before switching the currency).
+class CountryScreen extends ConsumerStatefulWidget {
   const CountryScreen({super.key, this.current});
 
   /// Set when editing from Profile; null during first-run setup.
   final String? current;
 
   @override
-  State<CountryScreen> createState() => _CountryScreenState();
+  ConsumerState<CountryScreen> createState() => _CountryScreenState();
 }
 
-class _CountryScreenState extends State<CountryScreen> {
+class _CountryScreenState extends ConsumerState<CountryScreen> {
   final _search = TextEditingController();
   late final Country? _guess = countryByCode(widget.current) ?? deviceCountry();
   late Country? _picked = _guess;
   bool _busy = false;
 
   bool get _editing => widget.current != null;
+
+  Future<bool> _askSwitch(Country c, String? base) async {
+    final ok = await showSheet<bool>(
+      context,
+      Builder(
+        builder: (ctx) => Padding(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(c.flag, style: const TextStyle(fontSize: 48)),
+            const SizedBox(height: 12),
+            Text('Show amounts in ${c.currency}?', textAlign: TextAlign.center, style: display(22)),
+            const SizedBox(height: 8),
+            Text(
+              'Totals are in ${base ?? 'your current currency'} now. Subscriptions keep their own currency either way.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: kMuted, height: 1.4),
+            ),
+            const SizedBox(height: 24),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text('Switch to ${c.currency}')),
+            const SizedBox(height: 4),
+            TextButton(
+              style: TextButton.styleFrom(foregroundColor: kText, minimumSize: const Size.fromHeight(48)),
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text('Keep ${base ?? 'current'}', style: const TextStyle(fontWeight: FontWeight.w600)),
+            ),
+          ]),
+        ),
+      ),
+    );
+    return ok == true;
+  }
 
   @override
   void dispose() {
@@ -35,9 +67,13 @@ class _CountryScreenState extends State<CountryScreen> {
   Future<void> _save() async {
     final c = _picked;
     if (c == null) return;
+    final base = ref.read(baseCurrencyProvider).value;
+    // Moving country doesn't mean you think in a new currency, so ask rather than switch silently.
+    final switchCurrency = !_editing || (c.currency != base && await _askSwitch(c, base));
+    if (!mounted) return;
     setState(() => _busy = true);
     try {
-      await setCountry(c.code, currency: _editing ? null : c.currency);
+      await setCountry(c.code, currency: switchCurrency ? c.currency : null);
       if (mounted && _editing) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) showError(context, 'Couldn\'t save your country: $e');

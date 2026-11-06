@@ -128,8 +128,9 @@ class Shortfall {
         due = _d(m['due_amount']) ?? 0,
         balance = _d(m['balance']) ?? 0,
         shortfall = _d(m['shortfall']) ?? 0,
-        days = m['days_until_first'] ?? 0;
-  final String sourceId, provider;
+        days = m['days_until_first'] ?? 0,
+        currency = isoCurrency(m['currency'] as String?);
+  final String sourceId, provider, currency;
   final double due, balance, shortfall;
   final int days;
 }
@@ -238,13 +239,14 @@ final filteredItemsProvider = Provider<List<FinancialItem>>((ref) {
 
 // ───────── Actions ─────────
 
-Future<void> setItemStatus(String id, String status) =>
-    db.from('financial_items').update({'status': status}).eq('id', id);
+// Postgrest builders are lazy: nothing is sent until awaited, so await here rather than trust callers.
+Future<void> setItemStatus(String id, String status) async =>
+    await db.from('financial_items').update({'status': status}).eq('id', id);
 
-Future<void> setBaseCurrency(String ccy) =>
-    db.from('profiles').update({'global_base_currency': ccy}).eq('id', db.auth.currentUser!.id);
+Future<void> setBaseCurrency(String ccy) async =>
+    await db.from('profiles').update({'global_base_currency': ccy}).eq('id', db.auth.currentUser!.id);
 
-Future<void> addItem(Map<String, dynamic> row) => db.from('financial_items').insert(row);
+Future<void> addItem(Map<String, dynamic> row) async => await db.from('financial_items').insert(row);
 
 /// Banks the user can link in their country (empty where bank sync isn't offered).
 final banksProvider = FutureProvider<List<String>>((ref) async {
@@ -265,7 +267,7 @@ Future<void> syncBanks() => db.functions.invoke('bank-sync/sync');
 /// Unlinks an Open Banking bank on the server, so the next sync doesn't bring its accounts back.
 Future<void> unlinkBank(String bank) => db.functions.invoke('bank-sync/disconnect', body: {'bank': bank});
 
-Future<void> removeAccounts(Iterable<String> ids) => db.from('payment_sources').delete().inFilter('id', ids.toList());
+Future<void> removeAccounts(Iterable<String> ids) async => await db.from('payment_sources').delete().inFilter('id', ids.toList());
 
 Future<Map<String, dynamic>> parseReceipt(Map<String, dynamic> body) async =>
     (await db.functions.invoke('parse-trial-receipt', body: body)).data as Map<String, dynamic>;

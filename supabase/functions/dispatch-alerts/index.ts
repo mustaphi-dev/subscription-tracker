@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
   }
 
   // Shortfalls: at most one push per account per 24h.
-  const { data: shorts } = await admin.from("shortfall_check").select("*, profiles:user_id(fcm_token, global_base_currency)");
+  const { data: shorts } = await admin.from("shortfall_check").select("*, profiles:user_id(fcm_token)");
   for (const s of shorts ?? []) {
     const token = (s as any).profiles?.fcm_token;
     if (!token) continue;
@@ -48,9 +48,8 @@ Deno.serve(async (req) => {
       .gt("sent_at", new Date(Date.now() - 864e5).toISOString());
     if (count) continue;
     await admin.from("alert_logs").insert({ payment_source_id: s.payment_source_id, alert_stage: "shortfall" });
-    const base = (s as any).profiles.global_base_currency;
     await sendPush(token, `⚠️ ${s.account_name} shortfall`,
-      `${money(s.due_amount, base)} due in ${s.days_until_first} days, balance ${money(s.balance ?? 0, base)}. Top up ${money(s.shortfall, base)}.`,
+      `${money(s.due_amount, s.currency)} due in ${s.days_until_first} days, balance ${money(s.balance ?? 0, s.currency)}. Top up ${money(s.shortfall, s.currency)}.`,
       { type: "shortfall", source_id: s.payment_source_id });
     sent++;
   }
