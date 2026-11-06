@@ -256,25 +256,6 @@ Future<void> setBaseCurrency(String ccy) =>
 
 Future<void> addItem(Map<String, dynamic> row) => db.from('financial_items').insert(row);
 
-const knownBanks = {'revolut', 'wise', 'lloyds', 'paypal'};
-
-/// Manual account for any bank. Known names map onto their provider so they get its colour and filter.
-Future<void> saveAccount({String? id, required String bank, required String name, required String currency, required double balance}) {
-  final key = bank.trim().toLowerCase();
-  final row = {
-    'provider': knownBanks.contains(key) ? key : 'other',
-    'institution': bank.trim(),
-    'account_name': name.trim().isEmpty ? bank.trim() : name.trim(),
-    'currency': currency,
-    'current_balance': balance,
-    'is_manual': true,
-    'last_synced_at': DateTime.now().toUtc().toIso8601String(),
-  };
-  return id == null ? db.from('payment_sources').insert(row) : db.from('payment_sources').update(row).eq('id', id);
-}
-
-Future<void> deleteAccount(String id) => db.from('payment_sources').delete().eq('id', id);
-
 /// Banks the user can link in their country (empty where bank sync isn't offered).
 final banksProvider = FutureProvider<List<String>>((ref) async {
   final country = await ref.watch(countryProvider.future);

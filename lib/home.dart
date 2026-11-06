@@ -520,12 +520,7 @@ class AccountStrip extends ConsumerWidget {
             final s = sources[i];
             final c = s.color;
             final on = selected == s.id;
-            return GestureDetector(
-              onLongPress: () {
-                HapticFeedback.mediumImpact();
-                showSheet(context, AccountForm(account: s));
-              },
-              child: Pressable(
+            return Pressable(
                 onTap: () => ref.read(sourceFilterProvider.notifier).set(on ? null : s.id),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 250),
@@ -558,7 +553,6 @@ class AccountStrip extends ConsumerWidget {
                     ),
                   ]),
                 ),
-              ),
             );
           },
         ),

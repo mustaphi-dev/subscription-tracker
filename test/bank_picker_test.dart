@@ -1,0 +1,40 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:subtracker/data.dart';
+import 'package:subtracker/screens.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+void main() {
+  setUpAll(() async {
+    GoogleFonts.config.allowRuntimeFetching = false;
+    SharedPreferences.setMockInitialValues({});
+    await Supabase.initialize(url: 'http://localhost', anonKey: 'test');
+  });
+
+  testWidgets('bank search keeps every typed letter and filters the list', (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        sourcesProvider.overrideWith((_) => Stream.value([])),
+        baseCurrencyProvider.overrideWith((_) => Stream.value('GBP')),
+        countryProvider.overrideWith((_) => Stream.value('GB')),
+        banksProvider.overrideWith((_) async => ['Monzo Bank', 'Revolut', 'Royal Bank of Scotland']),
+      ],
+      child: const MaterialApp(home: Scaffold(body: AccountsTab())),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add an account'));
+    await tester.pumpAndSettle();
+
+    final field = find.byType(TextField);
+    await tester.enterText(field, 'r');
+    await tester.pump();
+    await tester.enterText(field, 're');
+    await tester.pump();
+    expect(find.text('re'), findsOneWidget);
+    expect(find.text('Revolut'), findsWidgets);
+    expect(find.text('Monzo Bank'), findsNothing);
+  });
+}
