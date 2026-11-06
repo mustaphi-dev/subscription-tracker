@@ -272,11 +272,3 @@ Future<void> removeAccounts(Iterable<String> ids) async => await db.from('paymen
 Future<Map<String, dynamic>> parseReceipt(Map<String, dynamic> body) async =>
     (await db.functions.invoke('parse-trial-receipt', body: body)).data as Map<String, dynamic>;
 
-/// Human-readable message from an edge-function failure.
-String functionError(Object e) {
-  if (e is FunctionException) {
-    final d = e.details;
-    return d is Map ? '${d['error'] ?? d['message'] ?? e.reasonPhrase}' : '${e.reasonPhrase ?? e.status}';
-  }
-  return '$e';
-}

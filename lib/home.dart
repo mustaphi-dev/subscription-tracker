@@ -329,7 +329,7 @@ class DashboardTab extends ConsumerWidget {
         try {
           await syncBanks();
         } catch (e) {
-          if (context.mounted) showError(context, 'Sync failed: ${functionError(e)}');
+          if (context.mounted) showError(context, 'Couldn\'t refresh your banks. Try again in a moment.', e);
         }
       },
       slivers: [
@@ -752,7 +752,7 @@ class _TrialRings extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        SectionHeader('Free trials ending', trailing: Text('${trials.length}', style: label)),
+        const SectionHeader('Free trials ending'),
         SizedBox(
           height: 196,
           child: ListView.separated(
@@ -796,11 +796,6 @@ class _TrialRings extends StatelessWidget {
                         style: TextStyle(color: known ? tone : kMuted, fontSize: 12, fontWeight: FontWeight.w600, fontFeatures: tabular),
                       ),
                     ),
-                    if (known && t.currency != base && t.baseAmount != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4, left: 10),
-                        child: Text('≈ ${money(t.baseAmount!, base)}', style: const TextStyle(color: kMuted, fontSize: 11, fontFeatures: tabular)),
-                      ),
                   ]),
                 ),
               );
@@ -904,7 +899,7 @@ Future<void> scanReceipt(BuildContext context) async {
         ? showToast(context, 'Added ${item['merchant_name']}')
         : showToast(context, 'No trial or subscription found in that image', icon: CupertinoIcons.info_circle, tone: kAmber);
   } catch (e) {
-    if (context.mounted) showError(context, 'Scan failed: ${functionError(e)}');
+    if (context.mounted) showError(context, 'Couldn\'t read that receipt. Try a clearer photo.', e);
   }
 }
 
@@ -937,7 +932,7 @@ class _AddSheet extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Padding(padding: const EdgeInsets.fromLTRB(4, 4, 4, 16), child: Text('Add', style: display(24))),
-        option(CupertinoIcons.doc_text_viewfinder, kAccent, 'Scan a receipt', 'AI reads trial dates and the post-trial charge', () {
+        option(CupertinoIcons.doc_text_viewfinder, kAccent, 'Scan a receipt', 'Picks up the trial end date and price', () {
           // The sheet's context dies on pop; continue from the navigator's.
           final nav = Navigator.of(context)..pop();
           scanReceipt(nav.context);

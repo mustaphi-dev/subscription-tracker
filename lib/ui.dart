@@ -507,8 +507,11 @@ void showToast(BuildContext context, String message,
   _toastTimer = Timer(duration, close);
 }
 
-void showError(BuildContext context, String message) =>
-    showToast(context, message, tone: kCrimson, icon: CupertinoIcons.exclamationmark_circle, duration: const Duration(seconds: 4), closeSheets: false);
+/// Friendly [message] for the user; the raw [error] only goes to the debug log.
+void showError(BuildContext context, String message, [Object? error]) {
+  if (error != null) debugPrint('$message ($error)');
+  showToast(context, message, tone: kCrimson, icon: CupertinoIcons.exclamationmark_circle, duration: const Duration(seconds: 4), closeSheets: false);
+}
 
 /// Solid bottom sheet with a grab handle.
 Future<T?> showSheet<T>(BuildContext context, Widget child) => showModalBottomSheet<T>(

@@ -48,8 +48,10 @@ Deno.serve(async (req) => {
       .gt("sent_at", new Date(Date.now() - 864e5).toISOString());
     if (count) continue;
     await admin.from("alert_logs").insert({ payment_source_id: s.payment_source_id, alert_stage: "shortfall" });
-    await sendPush(token, `⚠️ ${s.account_name} shortfall`,
-      `${money(s.due_amount, s.currency)} due in ${s.days_until_first} days, balance ${money(s.balance ?? 0, s.currency)}. Top up ${money(s.shortfall, s.currency)}.`,
+    const bank = s.provider ? s.provider[0].toUpperCase() + s.provider.slice(1) : s.account_name;
+    const when = s.days_until_first === 0 ? "today" : s.days_until_first === 1 ? "tomorrow" : `in ${s.days_until_first} days`;
+    await sendPush(token, `Top up ${bank} by ${money(s.shortfall, s.currency)}`,
+      `${money(s.due_amount, s.currency)} is due ${when} and your balance is ${money(s.balance ?? 0, s.currency)}.`,
       { type: "shortfall", source_id: s.payment_source_id });
     sent++;
   }

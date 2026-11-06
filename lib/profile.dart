@@ -140,7 +140,7 @@ class _ProfileState extends ConsumerState<ProfileScreen> {
                     },
                     onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => CountryScreen(current: country ?? ''))),
                 ),
-                row(CupertinoIcons.creditcard, 'Manage accounts', sub: '${sources.length} connected or manual', onTap: () {
+                row(CupertinoIcons.creditcard, 'Manage accounts', sub: 'Banks, cards and wallets', onTap: () {
                   ref.read(tabProvider.notifier).set(2);
                   context.pop();
                 }),
