@@ -562,7 +562,6 @@ typedef Alert = ({String key, String logo, Color color, String title, String sub
 
 /// What the bell shows: low balances, trials ending within a week, and payments due in 24 hours.
 final alertsProvider = Provider<List<Alert>>((ref) {
-  final base = ref.watch(baseCurrencyProvider).value ?? 'GBP';
   final hidden = ref.watch(_dismissedAlerts);
   final banks = {for (final a in ref.watch(sourcesProvider).value ?? <PaymentSource>[]) a.id: a.bank};
   final now = DateTime.now();
@@ -573,8 +572,8 @@ final alertsProvider = Provider<List<Alert>>((ref) {
         key: 'short:${s.sourceId}:${s.due}',
         logo: banks[s.sourceId] ?? s.provider,
         color: kCrimson,
-        title: 'Top up ${banks[s.sourceId] ?? 'account'} by ${money(s.shortfall, base)}',
-        sub: '${money(s.due, base)} due ${s.days == 0 ? 'today' : 'within ${s.days} day${s.days == 1 ? '' : 's'}'}, balance ${money(s.balance, base)}',
+        title: 'Top up ${banks[s.sourceId] ?? 'account'} by ${money(s.shortfall, s.currency)}',
+        sub: '${money(s.due, s.currency)} due ${s.days == 0 ? 'today' : 'within ${s.days} day${s.days == 1 ? '' : 's'}'}, balance ${money(s.balance, s.currency)}',
       ),
     // Same window as the push reminders.
     for (final i in items.where((i) => i.isTrial && i.trialEnd!.difference(now).inDays < 7))
@@ -797,6 +796,11 @@ class _TrialRings extends StatelessWidget {
                         style: TextStyle(color: known ? tone : kMuted, fontSize: 12, fontWeight: FontWeight.w600, fontFeatures: tabular),
                       ),
                     ),
+                    if (known && t.currency != base && t.baseAmount != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4, left: 10),
+                        child: Text('≈ ${money(t.baseAmount!, base)}', style: const TextStyle(color: kMuted, fontSize: 11, fontFeatures: tabular)),
+                      ),
                   ]),
                 ),
               );

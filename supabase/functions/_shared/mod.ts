@@ -13,8 +13,13 @@ export const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
 /** Cron calls carry the service key. */
-export const isServiceCall = (req: Request) =>
-  req.headers.get("authorization") === `Bearer ${env("SUPABASE_SERVICE_ROLE_KEY")}`;
+export const isServiceCall = (req: Request) => {
+  const key = req.headers.get("authorization")?.replace("Bearer ", "");
+  if (!key) return false;
+  // Newer projects inject sb_secret_ keys here and in SUPABASE_SECRET_KEYS; accept either kind.
+  const secrets = Object.values(JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}"));
+  return key === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || secrets.includes(key);
+};
 
 /** Resolve the signed-in user from the app's JWT, or null. */
 export async function userFrom(req: Request): Promise<string | null> {
