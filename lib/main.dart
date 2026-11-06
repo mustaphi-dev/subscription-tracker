@@ -11,6 +11,7 @@ import 'data.dart';
 import 'ui.dart';
 import 'home.dart';
 import 'lock.dart';
+import 'country.dart';
 import 'onboarding.dart';
 import 'profile.dart';
 import 'push.dart';
@@ -31,7 +32,10 @@ Future<void> main() async {
 
 class _AuthRefresh extends ChangeNotifier {
   _AuthRefresh() {
-    _sub = db.auth.onAuthStateChange.listen((_) => notifyListeners());
+    _sub = db.auth.onAuthStateChange.listen((_) {
+      refreshNeedsCountry();
+      notifyListeners();
+    });
   }
   late final StreamSubscription _sub;
   @override
@@ -42,7 +46,7 @@ class _AuthRefresh extends ChangeNotifier {
 }
 
 final router = GoRouter(
-  refreshListenable: Listenable.merge([_AuthRefresh(), onboarded]),
+  refreshListenable: Listenable.merge([_AuthRefresh(), onboarded, needsCountry]),
   redirect: (_, s) {
     final signedIn = db.auth.currentSession != null;
     final at = s.matchedLocation;
@@ -51,13 +55,16 @@ final router = GoRouter(
       if (!onboarded.value) return at == '/welcome' ? null : '/welcome';
       return at == '/signin' ? null : '/signin';
     }
-    if (at == '/signin' || at == '/welcome') return '/';
+    // New accounts pick where they bank before anything else.
+    if (needsCountry.value) return at == '/country' ? null : '/country';
+    if (at == '/signin' || at == '/welcome' || at == '/country') return '/';
     return null;
   },
   routes: [
     GoRoute(path: '/', builder: (_, _) => const ShellScreen()),
     GoRoute(path: '/welcome', builder: (_, _) => const OnboardingScreen()),
     GoRoute(path: '/signin', builder: (_, _) => const SignInScreen()),
+    GoRoute(path: '/country', builder: (_, _) => const CountryScreen()),
     GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),
     GoRoute(path: '/confirm/:id', builder: (_, s) => ConfirmTrialScreen(s.pathParameters['id']!)),
   ],
@@ -83,7 +90,15 @@ class _AppState extends ConsumerState<App> with WidgetsBindingObserver {
     initPush(router);
     // Bank OAuth returns to subtracker://bank-connected.
     _links = AppLinks().uriLinkStream.listen((uri) {
-      if (uri.host == 'bank-connected') ref.invalidate(sourcesProvider);
+      if (uri.host != 'bank-connected') return;
+      ref.invalidate(sourcesProvider);
+      final ctx = router.routerDelegate.navigatorKey.currentContext;
+      if (ctx == null || !ctx.mounted) return;
+      if (uri.queryParameters['status'] == 'failed') {
+        showError(ctx, 'Your bank didn\'t share access, so nothing was connected.');
+      } else {
+        showToast(ctx, 'Bank connected');
+      }
     });
   }
 

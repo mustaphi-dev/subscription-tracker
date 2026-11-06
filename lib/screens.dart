@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' show AuthException;
 import 'package:url_launcher/url_launcher.dart';
 
 import 'brands.dart';
+import 'countries.dart';
 import 'data.dart';
 import 'home.dart';
 import 'item_tile.dart';
@@ -428,6 +429,7 @@ class AccountsTab extends ConsumerWidget {
     final sources = ref.watch(sourcesProvider).value ?? [];
     final base = ref.watch(baseCurrencyProvider).value ?? 'GBP';
     final total = sources.fold(0.0, (s, a) => s + (a.baseBalance ?? 0));
+    final country = countryByCode(ref.watch(countryProvider).value);
 
     return TabPage(
       title: 'Accounts',
@@ -533,47 +535,63 @@ class AccountsTab extends ConsumerWidget {
           ),
         ),
         const SliverToBoxAdapter(child: SectionHeader('Connect automatically')),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Surface(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Open Banking keeps balances and renewals in sync without typing them in.',
-                    style: TextStyle(color: kMuted, fontSize: 13, height: 1.4),
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      for (final p in providerLabels.keys)
-                        Expanded(
-                          child: Pressable(
-                            onTap: () async {
-                              try {
-                                await launchUrl(Uri.parse(await connectBank(p)), mode: LaunchMode.externalApplication);
-                              } catch (e) {
-                                if (context.mounted) showError(context, 'Couldn\'t connect ${providerLabels[p]}: ${functionError(e)}');
-                              }
-                            },
-                            child: Column(
-                              children: [
-                                _BankMark(providerLabels[p]!, providerColors[p]!, size: 44),
-                                const SizedBox(height: 6),
-                                Text(providerLabels[p]!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                              ],
+        if (country?.bankLinking ?? false)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Surface(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Open Banking keeps balances and renewals in sync without typing them in.',
+                      style: TextStyle(color: kMuted, fontSize: 13, height: 1.4),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        for (final p in providerLabels.keys)
+                          Expanded(
+                            child: Pressable(
+                              onTap: () async {
+                                try {
+                                  await launchUrl(Uri.parse(await connectBank(p)), mode: LaunchMode.externalApplication);
+                                } catch (e) {
+                                  if (context.mounted) showError(context, 'Couldn\'t connect ${providerLabels[p]}: ${functionError(e)}');
+                                }
+                              },
+                              child: Column(
+                                children: [
+                                  _BankMark(providerLabels[p]!, providerColors[p]!, size: 44),
+                                  const SizedBox(height: 6),
+                                  Text(providerLabels[p]!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          )
+        else
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Surface(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                child: Text(
+                  country == null
+                      ? 'Set your country in Profile to see which banks you can connect.'
+                      : 'Automatic bank sync isn\'t available in ${country.name} yet. Add your accounts above and keep the balances up to date yourself.',
+                  style: const TextStyle(color: kMuted, fontSize: 13, height: 1.4),
+                ),
               ),
             ),
           ),
-        ),
       ],
     );
   }
@@ -1151,7 +1169,7 @@ class _SignInState extends State<SignInScreen> {
               Text('Every renewal,\nbefore it hits.', style: display(38)),
               const SizedBox(height: 12),
               const Text(
-                'Subscriptions, free trials, Pay in 3 and balances across Revolut, Wise, Lloyds and PayPal.',
+                'Subscriptions, free trials, Pay in 3 and every account balance, in one place.',
                 style: TextStyle(color: kMuted, height: 1.4),
               ),
               const Spacer(flex: 3),
