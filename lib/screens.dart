@@ -859,48 +859,6 @@ class _BankMark extends StatelessWidget {
 
 // ───────── Sheets ─────────
 
-class InboundEmailTile extends StatelessWidget {
-  const InboundEmailTile({super.key});
-  @override
-  Widget build(BuildContext context) => FutureBuilder(
-    future: db.from('profiles').select('inbound_parse_email').single(),
-    builder: (_, snap) {
-      final email = snap.data?['inbound_parse_email'] as String?;
-      return Surface(
-        color: kSurfaceHi,
-        onTap: email == null
-            ? null
-            : () {
-                Clipboard.setData(ClipboardData(text: email));
-                showToast(context, 'Forwarding address copied');
-              },
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(color: kMint.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(14)),
-              child: const Icon(CupertinoIcons.at, color: kMint),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Forward trial emails', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                  const SizedBox(height: 2),
-                  Text(email ?? '…', maxLines: 1, overflow: TextOverflow.ellipsis, style: caption),
-                ],
-              ),
-            ),
-            const Icon(CupertinoIcons.doc_on_doc, size: 18, color: kFaint),
-          ],
-        ),
-      );
-    },
-  );
-}
-
 class ManualItemForm extends ConsumerStatefulWidget {
   const ManualItemForm({super.key});
   @override
@@ -1159,7 +1117,7 @@ class _SignInState extends State<SignInScreen> {
               Text('Every renewal,\nbefore it hits.', style: display(38)),
               const SizedBox(height: 12),
               const Text(
-                'Subscriptions, free trials, Pay in 3 and every account balance, in one place.',
+                'Subscriptions, free trials, pay later plans and every account balance, in one place.',
                 style: TextStyle(color: kMuted, height: 1.4),
               ),
               const Spacer(flex: 3),

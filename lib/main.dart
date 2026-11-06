@@ -15,6 +15,7 @@ import 'country.dart';
 import 'onboarding.dart';
 import 'profile.dart';
 import 'push.dart';
+import 'forwarding.dart';
 import 'screens.dart';
 
 Future<void> main() async {
@@ -66,6 +67,7 @@ final router = GoRouter(
     GoRoute(path: '/signin', builder: (_, _) => const SignInScreen()),
     GoRoute(path: '/country', builder: (_, _) => const CountryScreen()),
     GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),
+    GoRoute(path: '/forwarding', builder: (_, _) => const ForwardingScreen()),
     GoRoute(path: '/upcoming', builder: (_, _) => const UpcomingScreen()),
     GoRoute(path: '/confirm/:id', builder: (_, s) => ConfirmTrialScreen(s.pathParameters['id']!)),
   ],
@@ -133,7 +135,7 @@ class _AppState extends ConsumerState<App> with WidgetsBindingObserver {
     final signedIn = ref.watch(authProvider).value?.session ?? db.auth.currentSession;
 
     return MaterialApp.router(
-      title: 'Subtracker',
+      title: 'Wince',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
       routerConfig: router,
