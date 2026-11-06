@@ -143,9 +143,15 @@ final baseCurrencyProvider = StreamProvider<String>((ref) {
   final uid = db.auth.currentUser?.id;
   if (uid == null) return Stream.value('GBP');
   return db.from('profiles').stream(primaryKey: ['id']).eq('id', uid).map(
-        (rows) => rows.isEmpty ? 'GBP' : rows.first['global_base_currency'] as String,
+        (rows) => rows.isEmpty ? 'GBP' : isoCurrency(rows.first['global_base_currency'] as String?),
       );
 });
+
+/// [raw] as a clean ISO 4217 code, or GBP if it isn't one (so money never renders as "G12.00").
+String isoCurrency(String? raw) {
+  final c = (raw ?? '').trim().toUpperCase();
+  return RegExp(r'^[A-Z]{3}$').hasMatch(c) ? c : 'GBP';
+}
 
 /// The user's country code (null until picked after sign-up).
 final countryProvider = StreamProvider<String?>((ref) {

@@ -9,7 +9,7 @@ flutter pub get
 flutter run
 ```
 
-To use your own Supabase project: `cp env.example.json env.json`, fill it in, then run `flutter run --dart-define-from-file=env.json`.
+Copy `env.example.json` to `env.json`, fill it in, then run `flutter run --dart-define-from-file=env.json` (VS Code's launch config already passes it). `LOGO_DEV_KEY` is your logo.dev publishable key; without it, merchant and bank logos fall back to letter tiles.
 
 ## Backend setup
 
