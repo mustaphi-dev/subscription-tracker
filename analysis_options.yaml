@@ -10,7 +10,10 @@
 include: package:flutter_lints/flutter.yaml
 
 analyzer:
-  exclude: [build/**]
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
   errors:
     deprecated_member_use: ignore # FCM getToken: HTTP v1 'token' send still requires it
 
