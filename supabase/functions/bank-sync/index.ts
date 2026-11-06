@@ -1,12 +1,13 @@
 // Open Banking account linking. The provider for each country lives in ./aggregators.
-// Routes: POST /banks, POST /connect, POST /sync (user); GET /callback (browser redirect); POST /sync-all (cron).
+// Routes: POST /banks, POST /connect, POST /sync, POST /disconnect (user); GET /callback (browser redirect); POST /sync-all (cron).
 import { admin, env, isServiceCall, json, money, sendPush, userFrom } from "../_shared/mod.ts";
 import { enableBanking } from "./aggregators/enablebanking.ts";
+import { trueLayer } from "./aggregators/truelayer.ts";
 import { gocardless } from "./aggregators/gocardless.ts";
 import type { Aggregator, Txn } from "./aggregators/types.ts";
 
 // New links use the first provider covering the user's country; older links keep their own.
-const AGGREGATORS: Aggregator[] = [enableBanking, gocardless];
+const AGGREGATORS: Aggregator[] = [trueLayer, enableBanking, gocardless];
 const byId = (id: string) => AGGREGATORS.find((a) => a.id === id);
 const forCountry = (c: string | null) => AGGREGATORS.find((a) => c != null && a.countries.includes(c));
 
@@ -15,6 +16,7 @@ Deno.serve(async (req) => {
   try {
     if (route === "banks") return await banks(req);
     if (route === "connect") return await connect(req);
+    if (route === "disconnect") return await disconnect(req);
     if (route === "callback") return await callback(req);
     if (route === "sync") {
       const uid = await userFrom(req);
@@ -70,6 +72,23 @@ async function connect(req: Request) {
   return json({ link });
 }
 
+/** Unlinks a bank: drops its consents, stored tokens and synced accounts. Tracked items stay, detached. */
+async function disconnect(req: Request) {
+  const uid = await userFrom(req);
+  if (!uid) return json({ error: "unauthorised" }, 401);
+  const { bank } = await req.json();
+  if (typeof bank !== "string" || !bank) return json({ error: "bank required" }, 400);
+  // ponytail: forgets the link on our side only; the bank's consent lapses on its own (90 days max).
+  const { data: conns } = await admin.from("bank_connections").select("external_id").eq("user_id", uid).eq("provider", bank);
+  const ids = (conns ?? []).map((c) => c.external_id).filter(Boolean);
+  for (const r of [
+    ids.length ? await admin.from("bank_tokens").delete().in("external_id", ids) : null,
+    await admin.from("bank_connections").delete().eq("user_id", uid).eq("provider", bank),
+    await admin.from("payment_sources").delete().eq("user_id", uid).eq("institution", bank).eq("is_manual", false),
+  ]) if (r?.error) throw r.error;
+  return json({ ok: true });
+}
+
 async function callback(req: Request) {
   const q = new URL(req.url).searchParams;
   const ref = q.get("ref") ?? q.get("state");
@@ -99,7 +118,7 @@ async function syncUser(uid: string) {
       continue;
     }
     for (const accId of s.accounts) {
-      await syncAccount(uid, agg, conn.provider, accId);
+      await syncAccount(uid, agg, conn.provider, conn.external_id, accId);
       accounts++;
     }
   }
@@ -110,8 +129,8 @@ async function syncUser(uid: string) {
 const KNOWN = ["revolut", "wise", "lloyds", "paypal"];
 const providerKey = (bank: string) => KNOWN.find((k) => bank.toLowerCase().includes(k)) ?? "other";
 
-async function syncAccount(uid: string, agg: Aggregator, bank: string, accId: string) {
-  const { account, transactions } = await agg.fetchAccount(accId);
+async function syncAccount(uid: string, agg: Aggregator, bank: string, consent: string, accId: string) {
+  const { account, transactions } = await agg.fetchAccount(consent, accId);
   const { data: source } = await admin.from("payment_sources").upsert({
     user_id: uid, provider: providerKey(bank), institution: bank, external_account_id: accId,
     account_name: account.name,

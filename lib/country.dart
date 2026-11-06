@@ -82,12 +82,7 @@ class _CountryScreenState extends State<CountryScreen> {
                       style: const TextStyle(color: kMuted, height: 1.4),
                     ),
                     const SizedBox(height: 18),
-                    TextField(
-                      controller: _search,
-                      onChanged: (_) => setState(() {}),
-                      textInputAction: TextInputAction.search,
-                      decoration: const InputDecoration(hintText: 'Search countries', prefixIcon: Icon(CupertinoIcons.search, size: 18)),
-                    ),
+                    GlassSearchField(controller: _search, hint: 'Search countries', onChanged: (_) => setState(() {})),
                   ],
                 ),
               ),

@@ -1,4 +1,4 @@
-// One bank-data provider (Enable Banking, GoCardless, later TrueLayer or Mono…) behind a common shape,
+// One bank-data provider (TrueLayer, Enable Banking, GoCardless, later Mono…) behind a common shape,
 // so adding a country means adding a file here, not touching detection or the app.
 
 export type LinkStatus = "pending" | "linked" | "rejected" | "expired";
@@ -23,6 +23,6 @@ export interface Aggregator {
   completeLink(externalId: string, query: URLSearchParams): Promise<{ externalId: string; status: LinkStatus }>;
   /** Current state of a consent and the account ids it covers. */
   status(externalId: string): Promise<{ status: LinkStatus; accounts: string[] }>;
-  /** Balance and recent transactions for one account. */
-  fetchAccount(accountId: string): Promise<{ account: Account; transactions: Txn[] }>;
+  /** Balance and recent transactions for one account under the consent [externalId]. */
+  fetchAccount(externalId: string, accountId: string): Promise<{ account: Account; transactions: Txn[] }>;
 }

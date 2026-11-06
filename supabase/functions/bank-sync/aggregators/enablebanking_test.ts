@@ -73,7 +73,7 @@ Deno.test("account fetch picks the available balance, signs debits and follows p
         ],
       },
   });
-  const { account, transactions } = await enableBanking.fetchAccount("u1");
+  const { account, transactions } = await enableBanking.fetchAccount("sess", "u1");
   assertEquals(account, { id: "u1", name: "Club Lloyds", balance: 82.5, currency: "GBP" });
   assertEquals(transactions.map((t) => [t.merchant, t.amount, t.pending, t.date]), [
     ["NETFLIX.COM", -10.99, false, "2026-10-01"],

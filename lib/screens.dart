@@ -458,26 +458,11 @@ class AccountsTab extends ConsumerWidget {
             ),
           ),
         ),
-        const SliverToBoxAdapter(child: SectionHeader('Your accounts')),
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
             child: Column(
               children: [
-                if (sources.isNotEmpty) ...[
-                  Surface(
-                    padding: EdgeInsets.zero,
-                    child: Column(
-                      children: [
-                        for (var k = 0; k < sources.length; k++) ...[
-                          if (k > 0) const Divider(height: 1, indent: 70, color: kLine),
-                          _AccountRow(sources[k], base),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
                 // The plus searches every bank in your country.
                 Surface(
                   onTap: () {
@@ -514,11 +499,10 @@ class AccountsTab extends ConsumerWidget {
                           ],
                         ),
                       ),
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: const BoxDecoration(color: kAccent, shape: BoxShape.circle),
-                        child: const Icon(CupertinoIcons.plus, color: Colors.white, size: 22),
+                      // Same Liquid Glass as the bottom nav's add button.
+                      const Glass(
+                        oval: true,
+                        child: SizedBox.square(dimension: 40, child: Icon(CupertinoIcons.plus, size: 22)),
                       ),
                     ],
                   ),
@@ -552,54 +536,184 @@ class AccountsTab extends ConsumerWidget {
             ),
           ),
         ),
+        if (sources.isNotEmpty) ...[
+          const SliverToBoxAdapter(child: SectionHeader('Your accounts')),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Surface(
+                padding: EdgeInsets.zero,
+                child: Column(
+                  children: [
+                    for (final (k, accounts) in <String, List<PaymentSource>>{for (final s in sources) s.bank: [for (final t in sources) if (t.bank == s.bank) t]}.values.indexed) ...[
+                      if (k > 0) const Divider(height: 1, indent: 70, color: kLine),
+                      _BankRow(accounts, base),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
 }
 
-class _AccountRow extends StatelessWidget {
-  const _AccountRow(this.s, this.base);
-  final PaymentSource s;
+/// One bank with all its accounts (current, savings…) folded into a single row and total.
+class _BankRow extends StatelessWidget {
+  const _BankRow(this.accounts, this.base);
+  final List<PaymentSource> accounts;
   final String base;
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(16),
-    child: Row(
-      children: [
-        _BankMark(s.bank, s.color),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+  Widget build(BuildContext context) {
+    final first = accounts.first;
+    final synced = accounts.map((a) => a.lastSynced).nonNulls.fold<DateTime?>(null, (m, d) => m == null || d.isAfter(m) ? d : m);
+    final total = accounts.fold(0.0, (t, a) => t + (a.baseBalance ?? 0));
+    final count = accounts.length == 1 ? first.name : '${accounts.length} accounts';
+    return Pressable(
+      scale: 0.99,
+      onTap: () => showSheet(context, _BankSheet(accounts, base)),
+      child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          _BankMark(first.bank, first.color),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(first.bank, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  '$count · ${first.isManual ? 'updated' : 'synced'} ${synced == null ? 'never' : DateFormat('d MMM, HH:mm').format(synced)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: caption,
+                ),
+              ],
+            ),
+          ),
+          Text(money(total, base), style: const TextStyle(fontWeight: FontWeight.w600, fontFeatures: tabular)),
+          const SizedBox(width: 4),
+          const Icon(CupertinoIcons.chevron_right, color: kFaint, size: 18),
+        ],
+      ),
+      ),
+    );
+  }
+}
+
+/// A bank's accounts, with the one action that matters: unlink it (or remove it, if added by hand).
+class _BankSheet extends StatelessWidget {
+  const _BankSheet(this.accounts, this.base);
+  final List<PaymentSource> accounts;
+  final String base;
+  @override
+  Widget build(BuildContext context) {
+    final bank = accounts.first.bank;
+    final manual = accounts.every((a) => a.isManual);
+    Future<void> remove() async {
+      final ok = await showSheet<bool>(
+        context,
+        Builder(
+          builder: (ctx) => Padding(
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text(manual ? 'Remove $bank?' : 'Unlink $bank?', textAlign: TextAlign.center, style: display(22)),
+              const SizedBox(height: 8),
               Text(
-                s.name == s.bank ? s.bank : '${s.bank} · ${s.name}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w600),
+                manual
+                    ? 'Its balance goes from your total. Subscriptions you track stay, without an account.'
+                    : 'We\'ll stop reading $bank and remove its ${accounts.length == 1 ? 'account' : '${accounts.length} accounts'} here. '
+                        'Subscriptions found from it stay. You can connect it again any time.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: kMuted, height: 1.4),
               ),
-              Text(
-                s.isManual
-                    ? 'Manual · updated ${s.lastSynced == null ? 'never' : DateFormat('d MMM').format(s.lastSynced!)}'
-                    : 'Open Banking · synced ${s.lastSynced == null ? 'never' : DateFormat('d MMM, HH:mm').format(s.lastSynced!)}',
-                style: caption,
+              const SizedBox(height: 24),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: kCrimson, foregroundColor: Colors.white),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text(manual ? 'Remove' : 'Unlink'),
               ),
-            ],
+              const SizedBox(height: 4),
+              TextButton(
+                style: TextButton.styleFrom(foregroundColor: kText, minimumSize: const Size.fromHeight(48)),
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Keep it', style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+            ]),
           ),
         ),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              money(s.balance, s.currency),
-              style: const TextStyle(fontWeight: FontWeight.w600, fontFeatures: tabular),
+      );
+      if (ok != true || !context.mounted) return;
+      try {
+        manual ? await removeAccounts(accounts.map((a) => a.id)) : await unlinkBank(bank);
+        if (context.mounted) {
+          Navigator.of(context).pop();
+          showToast(context, manual ? '$bank removed' : '$bank unlinked');
+        }
+      } catch (e) {
+        if (context.mounted) showError(context, 'Couldn\'t ${manual ? 'remove' : 'unlink'} $bank: ${functionError(e)}');
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(children: [
+            _BankMark(bank, accounts.first.color, size: 44),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(bank, style: display(20)),
+                Text(manual ? 'Added by hand' : 'Open Banking · read-only', style: caption),
+              ]),
             ),
-            if (s.currency != base && s.baseBalance != null) Text('≈ ${money(s.baseBalance!, base)}', style: caption),
-          ],
-        ),
-      ],
-    ),
-  );
+            Text(money(accounts.fold(0.0, (t, a) => t + (a.baseBalance ?? 0)), base), style: display(18)),
+          ]),
+          const SizedBox(height: 16),
+          Surface(
+            padding: EdgeInsets.zero,
+            color: kSurfaceHi,
+            child: Column(children: [
+              for (final (k, a) in accounts.indexed) ...[
+                if (k > 0) const Divider(height: 1, color: kLine),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(children: [
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        Text(
+                          '${a.isManual ? 'Updated' : 'Synced'} ${a.lastSynced == null ? 'never' : DateFormat('d MMM, HH:mm').format(a.lastSynced!)}',
+                          style: caption,
+                        ),
+                      ]),
+                    ),
+                    Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                      Text(money(a.balance, a.currency), style: const TextStyle(fontWeight: FontWeight.w600, fontFeatures: tabular)),
+                      if (a.currency != base && a.baseBalance != null) Text('≈ ${money(a.baseBalance!, base)}', style: caption),
+                    ]),
+                  ]),
+                ),
+              ],
+            ]),
+          ),
+          const SizedBox(height: 16),
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(foregroundColor: kCrimson, side: BorderSide(color: kCrimson.withValues(alpha: 0.4))),
+            onPressed: remove,
+            child: Text(manual ? 'Remove account' : 'Unlink $bank'),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
 }
 
 Future<void> _connect(BuildContext context, String bank) async {
@@ -686,10 +800,7 @@ class _BankPickerState extends ConsumerState<_BankPicker> {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: TextField(
-              onChanged: (v) => setState(() => _q = v.trim()),
-              decoration: const InputDecoration(hintText: 'Search banks', prefixIcon: Icon(CupertinoIcons.search, size: 18)),
-            ),
+            child: GlassSearchField(hint: 'Search banks', onChanged: (v) => setState(() => _q = v)),
           ),
           const SizedBox(height: 8),
           if (!banks.isLoading && shown.isEmpty)
@@ -756,33 +867,6 @@ class _BankMark extends StatelessWidget {
 }
 
 // ───────── Sheets ─────────
-
-class AlertsSheet extends ConsumerWidget {
-  const AlertsSheet({super.key});
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final now = DateTime.now();
-    final soon = chargesBetween(ref.watch(itemsProvider).value ?? [], now, now.add(const Duration(days: 7)));
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-          child: Text('Next 7 days', style: display(22)),
-        ),
-        if (soon.isEmpty)
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 0, 20, 24),
-            child: Text('Nothing due. We\'ll notify you 7 days, 3 days and 24 hours before any trial converts.', style: TextStyle(color: kMuted, height: 1.4)),
-          )
-        else
-          Flexible(child: SingleChildScrollView(child: ItemGroup(soon.map((c) => c.item).toSet().toList(), flat: true))),
-        const SizedBox(height: 16),
-      ],
-    );
-  }
-}
 
 class InboundEmailTile extends StatelessWidget {
   const InboundEmailTile({super.key});

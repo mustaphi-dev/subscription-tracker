@@ -243,6 +243,65 @@ class Glass extends StatelessWidget {
       );
 }
 
+/// Search input in the bottom nav's Liquid Glass. Shows a clear button once something is typed.
+class GlassSearchField extends StatefulWidget {
+  const GlassSearchField({super.key, required this.hint, required this.onChanged, this.controller});
+  final String hint;
+
+  /// Called with the trimmed text on every change, including '' when cleared.
+  final ValueChanged<String> onChanged;
+  final TextEditingController? controller;
+  @override
+  State<GlassSearchField> createState() => _GlassSearchFieldState();
+}
+
+class _GlassSearchFieldState extends State<GlassSearchField> {
+  late final _c = widget.controller ?? TextEditingController();
+
+  @override
+  void dispose() {
+    if (widget.controller == null) _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Glass(
+        radius: 24,
+        child: SizedBox(
+          height: 48,
+          child: TextField(
+            controller: _c,
+            onChanged: (v) {
+              setState(() {}); // show or hide the clear button
+              widget.onChanged(v.trim());
+            },
+            textInputAction: TextInputAction.search,
+            textAlignVertical: TextAlignVertical.center,
+            cursorColor: kText,
+            decoration: InputDecoration(
+              hintText: widget.hint,
+              hintStyle: const TextStyle(color: kMuted),
+              prefixIcon: const Icon(CupertinoIcons.search, size: 18, color: kMuted),
+              suffixIcon: _c.text.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Clear',
+                      icon: const Icon(CupertinoIcons.xmark_circle_fill, size: 18, color: kMuted),
+                      onPressed: () {
+                        _c.clear();
+                        setState(() {});
+                        widget.onChanged('');
+                      },
+                    ),
+              filled: false,
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+        ),
+      );
+}
+
 /// Single soft glow behind the top of a screen, tinted by context.
 class Ambient extends StatelessWidget {
   const Ambient({super.key, required this.child, this.color = kAccent});
@@ -472,6 +531,36 @@ Future<T?> showSheet<T>(BuildContext context, Widget child) => showModalBottomSh
               ),
             ),
             Flexible(child: child),
+          ]),
+        ),
+      ),
+    );
+
+/// Bottom sheet the user can drag taller by its handle; [builder] must hand [scroll] to its list.
+Future<T?> showDraggableSheet<T>(BuildContext context, Widget Function(ScrollController scroll) builder) => showModalBottomSheet<T>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: kSurface,
+      barrierColor: Colors.black54,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.45,
+        minChildSize: 0.25,
+        maxChildSize: 0.9,
+        snap: true,
+        builder: (ctx, scroll) => SafeArea(
+          top: false,
+          child: Column(children: [
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(top: 10, bottom: 8),
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(color: kFaint, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            Expanded(child: builder(scroll)),
           ]),
         ),
       ),

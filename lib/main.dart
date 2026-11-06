@@ -66,6 +66,7 @@ final router = GoRouter(
     GoRoute(path: '/signin', builder: (_, _) => const SignInScreen()),
     GoRoute(path: '/country', builder: (_, _) => const CountryScreen()),
     GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),
+    GoRoute(path: '/upcoming', builder: (_, _) => const UpcomingScreen()),
     GoRoute(path: '/confirm/:id', builder: (_, s) => ConfirmTrialScreen(s.pathParameters['id']!)),
   ],
 );

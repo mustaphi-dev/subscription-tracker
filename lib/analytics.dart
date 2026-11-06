@@ -409,38 +409,46 @@ class _TopMerchants extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final top = [...items]..sort((a, b) => b.monthlyBase.compareTo(a.monthlyBase));
-    final shown = top.take(6).toList();
-    final maxV = shown.isEmpty ? 1.0 : max(shown.first.monthlyBase, 0.01);
+    final maxV = top.isEmpty ? 1.0 : max(top.first.monthlyBase, 0.01);
     return _Card(
       title: 'Biggest commitments',
       child: Column(children: [
-        for (final i in shown)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Row(children: [
-              MerchantAvatar(i.merchant, size: 32),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [
-                    Expanded(child: Text(i.merchant, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600))),
-                    Text('${money(i.monthlyBase, base)}/mo', style: const TextStyle(fontFeatures: tabular, fontSize: 13)),
-                  ]),
-                  const SizedBox(height: 6),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(3),
-                    child: TweenAnimationBuilder<double>(
-                      tween: Tween(begin: 0, end: i.monthlyBase / maxV),
-                      duration: const Duration(milliseconds: 800),
-                      curve: springOut,
-                      builder: (_, v, _) => LinearProgressIndicator(value: v, minHeight: 5, backgroundColor: kSurfaceHi, color: _typeColors[i.type] ?? kAccent),
-                    ),
-                  ),
-                ]),
-              ),
-            ]),
-          ),
+        for (final i in top.take(5)) _MerchantBar(i, maxV, base),
       ]),
     );
   }
+}
+
+/// One merchant's monthly cost, with a bar scaled against the biggest.
+class _MerchantBar extends StatelessWidget {
+  const _MerchantBar(this.i, this.maxV, this.base);
+  final FinancialItem i;
+  final double maxV;
+  final String base;
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(children: [
+          MerchantAvatar(i.merchant, size: 32),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Expanded(child: Text(i.merchant, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600))),
+                Text('${money(i.monthlyBase, base)}/mo', style: const TextStyle(fontFeatures: tabular, fontSize: 13)),
+              ]),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(3),
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: i.monthlyBase / maxV),
+                  duration: const Duration(milliseconds: 800),
+                  curve: springOut,
+                  builder: (_, v, _) => LinearProgressIndicator(value: v, minHeight: 5, backgroundColor: kSurfaceHi, color: _typeColors[i.type] ?? kAccent),
+                ),
+              ),
+            ]),
+          ),
+        ]),
+      );
 }

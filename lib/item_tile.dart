@@ -53,11 +53,17 @@ class LiveCountdown extends ConsumerWidget {
 const _cycleLabel = {'weekly': 'Weekly', 'monthly': 'Monthly', 'quarterly': 'Quarterly', 'yearly': 'Yearly', 'once': 'One-off'};
 const _typeLabel = {'free_trial': 'Free trial', 'subscription': 'Subscription', 'installment': 'Installment', 'income': 'Income'};
 
-/// Flat row for grouped lists. Tap to unfold details; swipe left to cancel.
+/// Flat row for grouped lists. Tap to unfold details (or open them in a sheet); swipe left to cancel.
 class ItemRow extends ConsumerStatefulWidget {
-  const ItemRow(this.item, {super.key, this.initiallyOpen = false});
+  const ItemRow(this.item, {super.key, this.initiallyOpen = false, this.sheet = false, this.pinned = false});
   final FinancialItem item;
   final bool initiallyOpen;
+
+  /// Tap opens the details in a bottom sheet instead of unfolding in the list.
+  final bool sheet;
+
+  /// Details stay open and the row can't be swiped: the row as shown inside that sheet.
+  final bool pinned;
   @override
   ConsumerState<ItemRow> createState() => _ItemRowState();
 }
@@ -76,10 +82,14 @@ class _ItemRowState extends ConsumerState<ItemRow> {
 
     final row = GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () {
-        HapticFeedback.selectionClick();
-        setState(() => _open = !_open);
-      },
+      onTap: widget.pinned
+          ? null
+          : () {
+              HapticFeedback.selectionClick();
+              widget.sheet
+                  ? showSheet(context, Padding(padding: const EdgeInsets.only(bottom: 8), child: ItemRow(i, initiallyOpen: true, pinned: true)))
+                  : setState(() => _open = !_open);
+            },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(children: [
@@ -116,7 +126,7 @@ class _ItemRowState extends ConsumerState<ItemRow> {
 
     return Dismissible(
       key: ValueKey(i.id),
-      direction: income ? DismissDirection.none : DismissDirection.endToStart,
+      direction: income || widget.pinned ? DismissDirection.none : DismissDirection.endToStart,
       background: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 24),
@@ -135,7 +145,7 @@ class _ItemRowState extends ConsumerState<ItemRow> {
         duration: const Duration(milliseconds: 420),
         curve: springOut,
         alignment: Alignment.topCenter,
-        child: Column(children: [
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
           row,
           if (_open)
             Container(
@@ -299,8 +309,11 @@ class _Tag extends StatelessWidget {
 
 /// Rows grouped in one solid surface with hairline dividers.
 class ItemGroup extends StatelessWidget {
-  const ItemGroup(this.items, {super.key, this.flat = false});
+  const ItemGroup(this.items, {super.key, this.flat = false, this.sheet = false});
   final List<FinancialItem> items;
+
+  /// Rows open their details in a bottom sheet (see [ItemRow.sheet]).
+  final bool sheet;
 
   /// Sheets list rows straight on the sheet, separated by lines; pages wrap them in a card.
   final bool flat;
@@ -309,7 +322,7 @@ class ItemGroup extends StatelessWidget {
     final rows = Column(children: [
       for (var k = 0; k < items.length; k++) ...[
         if (k > 0) const Divider(height: 1, indent: 70, color: kLine),
-        ItemRow(items[k]),
+        ItemRow(items[k], sheet: sheet),
       ],
     ]);
     if (flat) return Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: rows);
