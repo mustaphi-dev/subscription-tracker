@@ -136,7 +136,7 @@ class _ProfileState extends ConsumerState<ProfileScreen> {
                 row(CupertinoIcons.globe, 'Country',
                     sub: switch (countryByCode(country)) {
                       null => 'Not set',
-                      final c => '${c.flag}  ${c.name}${c.bankLinking ? ' · Bank sync available' : ''}',
+                      final c => '${c.flag}  ${c.name}',
                     },
                     onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => CountryScreen(current: country ?? ''))),
                 ),

@@ -151,7 +151,7 @@ class _CountryScreenState extends ConsumerState<CountryScreen> {
                                 children: [
                                   Text(c.name, style: const TextStyle(fontWeight: FontWeight.w500)),
                                   Text(
-                                    c.bankLinking ? '${c.currency} · Bank sync available' : c.currency,
+                                    c.currency,
                                     style: caption.copyWith(color: c.bankLinking ? kMint : kMuted),
                                   ),
                                 ],

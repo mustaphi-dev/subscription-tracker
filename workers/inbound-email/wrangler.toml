@@ -1,0 +1,7 @@
+name = "wince-inbound-email"
+main = "index.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+FUNCTION_URL = "https://nvdbtfnfnimamiolbqwk.supabase.co/functions/v1/parse-trial-receipt"
+# INBOUND_SECRET is a secret: `npx wrangler secret put INBOUND_SECRET`
