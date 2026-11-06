@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
     method: "POST",
     headers: { "x-api-key": env("ANTHROPIC_API_KEY"), "anthropic-version": "2023-06-01", "content-type": "application/json" },
     body: JSON.stringify({
-      model: Deno.env.get("ANTHROPIC_MODEL") ?? "claude-opus-5-5",
+      model: Deno.env.get("ANTHROPIC_MODEL") ?? "claude-haiku-5-5",
       max_tokens: 1024,
       tools: [{ name: "record_item", description: "Record the extracted billing item", input_schema: SCHEMA }],
       tool_choice: { type: "tool", name: "record_item" },

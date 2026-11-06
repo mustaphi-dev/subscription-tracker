@@ -46,3 +46,4 @@ app.*.map.json
 
 # Local app config (copy from env.example.json)
 env.json
+node_modules/
