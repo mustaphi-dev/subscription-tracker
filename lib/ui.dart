@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 
 import 'brands.dart';
+import 'countries.dart';
 import 'data.dart';
 
 // ───────── Tokens ─────────
@@ -32,6 +33,15 @@ const providerColors = {
   'paypal': Color(0xFF6C63FF),
 };
 const providerLabels = {'revolut': 'Revolut', 'wise': 'Wise', 'lloyds': 'Lloyds', 'paypal': 'PayPal'};
+
+/// A bank's brand colour if the app knows it, otherwise a stable colour from its name.
+Color providerColorFor(String bank) {
+  final key = bank.toLowerCase();
+  for (final e in providerColors.entries) {
+    if (key.contains(e.key)) return e.value;
+  }
+  return HSLColor.fromAHSL(1, (key.hashCode % 360).abs().toDouble(), 0.55, 0.6).toColor();
+}
 
 extension SourceLook on PaymentSource {
   /// Bank name to show: the provider's, or whatever the user typed for other banks.
@@ -566,6 +576,13 @@ const currencies = [
   ('GHS', '🇬🇭', 'Ghanaian cedi'),
 ];
 
+/// The picker's currencies, plus the user's own if it isn't one of them (e.g. NGN after picking Nigeria).
+List<(String, String, String)> currencyChoices(String current) {
+  if (currencies.any((c) => c.$1 == current)) return currencies;
+  final home = countries.where((c) => c.currency == current).firstOrNull;
+  return [...currencies, (current, home?.flag ?? '💱', currencyNames[current] ?? home?.name ?? current)];
+}
+
 /// Custom popover that springs out of its top-right corner, just under the top bar.
 /// Opens with a spring; closes fast (showGeneralDialog can't have a shorter reverse duration).
 Future<String?> pickCurrency(BuildContext context, String current) => Navigator.of(context, rootNavigator: true).push<String>(PageRouteBuilder(
@@ -595,7 +612,7 @@ Future<String?> pickCurrency(BuildContext context, String current) => Navigator.
                   padding: EdgeInsets.fromLTRB(12, 10, 12, 6),
                   child: Text('DISPLAY CURRENCY', style: TextStyle(color: kFaint, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
                 ),
-                for (final (code, flag, name) in currencies)
+                for (final (code, flag, name) in currencyChoices(current))
                   Pressable(
                     scale: 0.98,
                     onTap: () => Navigator.pop(ctx, code),
@@ -644,7 +661,7 @@ class CurrencyPill extends StatelessWidget {
   final ValueChanged<String> onChanged;
   @override
   Widget build(BuildContext context) {
-    final flag = currencies.where((c) => c.$1 == current).firstOrNull?.$2 ?? '💱';
+    final flag = currencyChoices(current).where((c) => c.$1 == current).firstOrNull?.$2 ?? '💱';
     return Semantics(
       button: true,
       label: 'Display currency $current',

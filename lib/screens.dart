@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +10,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' show AuthException;
 import 'package:url_launcher/url_launcher.dart';
 
 import 'brands.dart';
+import 'countries.dart';
 import 'data.dart';
 import 'home.dart';
 import 'item_tile.dart';
@@ -428,6 +431,7 @@ class AccountsTab extends ConsumerWidget {
     final sources = ref.watch(sourcesProvider).value ?? [];
     final base = ref.watch(baseCurrencyProvider).value ?? 'GBP';
     final total = sources.fold(0.0, (s, a) => s + (a.baseBalance ?? 0));
+    ref.watch(countryProvider); // keeps the country loaded for _syncUnavailable
 
     return TabPage(
       title: 'Accounts',
@@ -458,49 +462,10 @@ class AccountsTab extends ConsumerWidget {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: sources.isEmpty
-                ? Surface(
-                    onTap: () => showSheet(context, const AccountForm()),
-                    child: Row(
-                      children: [
-                        // Overlapping logos hint at what can be added.
-                        SizedBox(
-                          width: 36 + 3 * 22, // 32px logo + 2px ring each side
-                          height: 36,
-                          child: Stack(
-                            children: [
-                              for (final (i, b) in const ['Monzo', 'Barclays', 'GCB', 'MTN MoMo'].indexed)
-                                Positioned(
-                                  left: i * 22,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(2),
-                                    decoration: BoxDecoration(color: kSurface, borderRadius: BorderRadius.circular(13)),
-                                    child: MerchantAvatar(b, size: 32),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Add an account', style: TextStyle(fontWeight: FontWeight.w600)),
-                              Text('Any bank, card or wallet', style: caption),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: const BoxDecoration(color: kAccent, shape: BoxShape.circle),
-                          child: const Icon(CupertinoIcons.plus, color: Colors.white, size: 22),
-                        ),
-                      ],
-                    ),
-                  )
-                : Surface(
+            child: Column(
+              children: [
+                if (sources.isNotEmpty) ...[
+                  Surface(
                     padding: EdgeInsets.zero,
                     child: Column(
                       children: [
@@ -508,31 +473,62 @@ class AccountsTab extends ConsumerWidget {
                           if (k > 0) const Divider(height: 1, indent: 70, color: kLine),
                           _AccountRow(sources[k], base),
                         ],
-                        // The one place to add a manual account once you have some.
-                        const Divider(height: 1, indent: 70, color: kLine),
-                        Pressable(
-                          scale: 0.99,
-                          onTap: () => showSheet(context, const AccountForm()),
-                          child: const Padding(
-                            padding: EdgeInsets.all(16),
-                            child: Row(
-                              children: [
-                                SizedBox.square(dimension: 40, child: Icon(CupertinoIcons.plus, color: kMuted)),
-                                SizedBox(width: 14),
-                                Text(
-                                  'Add account',
-                                  style: TextStyle(color: kMuted, fontWeight: FontWeight.w600),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
                       ],
                     ),
                   ),
+                  const SizedBox(height: 12),
+                ],
+                // The plus searches every bank in your country.
+                Surface(
+                  onTap: () {
+                    final why = _syncUnavailable(ref);
+                    why == null ? showSheet(context, const _BankPicker()) : showError(context, why);
+                  },
+                  child: Row(
+                    children: [
+                      // Overlapping logos hint at what can be added.
+                      SizedBox(
+                        width: 36 + 3 * 22, // 32px logo + 2px ring each side
+                        height: 36,
+                        child: Stack(
+                          children: [
+                            for (final (i, b) in const ['Monzo', 'Barclays', 'GCB', 'MTN MoMo'].indexed)
+                              Positioned(
+                                left: i * 22,
+                                child: Container(
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: BoxDecoration(color: kSurface, borderRadius: BorderRadius.circular(13)),
+                                  child: MerchantAvatar(b, size: 32),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Add an account', style: TextStyle(fontWeight: FontWeight.w600)),
+                            Text('Any bank, card or wallet', style: caption),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: const BoxDecoration(color: kAccent, shape: BoxShape.circle),
+                        child: const Icon(CupertinoIcons.plus, color: Colors.white, size: 22),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         const SliverToBoxAdapter(child: SectionHeader('Connect automatically')),
+        // Common banks connect in one tap.
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -548,25 +544,7 @@ class AccountsTab extends ConsumerWidget {
                   const SizedBox(height: 14),
                   Row(
                     children: [
-                      for (final p in providerLabels.keys)
-                        Expanded(
-                          child: Pressable(
-                            onTap: () async {
-                              try {
-                                await launchUrl(Uri.parse(await connectBank(p)), mode: LaunchMode.externalApplication);
-                              } catch (e) {
-                                if (context.mounted) showError(context, 'Couldn\'t connect ${providerLabels[p]}: ${functionError(e)}');
-                              }
-                            },
-                            child: Column(
-                              children: [
-                                _BankMark(providerLabels[p]!, providerColors[p]!, size: 44),
-                                const SizedBox(height: 6),
-                                Text(providerLabels[p]!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                              ],
-                            ),
-                          ),
-                        ),
+                      for (final b in _commonBanks) _BankTile(b, _BankMark(b, providerColorFor(b), size: 44), () => _connectByName(context, ref, b)),
                     ],
                   ),
                 ],
@@ -584,43 +562,96 @@ class _AccountRow extends StatelessWidget {
   final PaymentSource s;
   final String base;
   @override
-  Widget build(BuildContext context) => Pressable(
-    scale: 0.99,
-    onTap: () => showSheet(context, AccountForm(account: s)),
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          _BankMark(s.bank, s.color),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  s.name == s.bank ? s.bank : '${s.bank} · ${s.name}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                Text(
-                  s.isManual
-                      ? 'Manual · updated ${s.lastSynced == null ? 'never' : DateFormat('d MMM').format(s.lastSynced!)}'
-                      : 'Open Banking · synced ${s.lastSynced == null ? 'never' : DateFormat('d MMM, HH:mm').format(s.lastSynced!)}',
-                  style: caption,
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.all(16),
+    child: Row(
+      children: [
+        _BankMark(s.bank, s.color),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                money(s.balance, s.currency),
-                style: const TextStyle(fontWeight: FontWeight.w600, fontFeatures: tabular),
+                s.name == s.bank ? s.bank : '${s.bank} · ${s.name}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
-              if (s.currency != base && s.baseBalance != null) Text('≈ ${money(s.baseBalance!, base)}', style: caption),
+              Text(
+                s.isManual
+                    ? 'Manual · updated ${s.lastSynced == null ? 'never' : DateFormat('d MMM').format(s.lastSynced!)}'
+                    : 'Open Banking · synced ${s.lastSynced == null ? 'never' : DateFormat('d MMM, HH:mm').format(s.lastSynced!)}',
+                style: caption,
+              ),
             ],
+          ),
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              money(s.balance, s.currency),
+              style: const TextStyle(fontWeight: FontWeight.w600, fontFeatures: tabular),
+            ),
+            if (s.currency != base && s.baseBalance != null) Text('≈ ${money(s.baseBalance!, base)}', style: caption),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+Future<void> _connect(BuildContext context, String bank) async {
+  try {
+    await launchUrl(Uri.parse(await connectBank(bank)), mode: LaunchMode.externalApplication);
+  } catch (e) {
+    if (context.mounted) showError(context, 'Couldn\'t connect $bank: ${functionError(e)}');
+  }
+}
+
+/// Why bank sync can't be used here, or null when it can. Sync follows the country on your profile.
+String? _syncUnavailable(WidgetRef ref) {
+  final country = countryByCode(ref.read(countryProvider).value);
+  if (country == null) return 'Set your country in Profile to connect a bank.';
+  return country.bankLinking ? null : 'Bank sync isn\'t available in ${country.name} yet.';
+}
+
+/// Four well-known banks shown on the Accounts card.
+const _commonBanks = ['Revolut', 'Wise', 'Lloyds', 'PayPal'];
+
+/// Connects [name] (e.g. "Lloyds") using the provider's own name for it (e.g. "Lloyds Bank").
+Future<void> _connectByName(BuildContext context, WidgetRef ref, String name) async {
+  final why = _syncUnavailable(ref);
+  if (why != null) return showError(context, why);
+  // A tap before the list loads waits for it instead of failing.
+  final all = await ref.read(banksProvider.future).catchError((_) => <String>[]);
+  final bank = all.where((b) => b.toLowerCase().startsWith(name.toLowerCase())).firstOrNull;
+  if (!context.mounted) return;
+  if (bank == null) {
+    return showError(context, all.isEmpty ? 'Bank sync isn\'t available yet. No banks came back from the provider.' : '$name can\'t be connected yet.');
+  }
+  await _connect(context, bank);
+}
+
+class _BankTile extends StatelessWidget {
+  const _BankTile(this.label, this.mark, this.onTap);
+  final String label;
+  final Widget mark;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: Pressable(
+      onTap: onTap,
+      child: Column(
+        children: [
+          mark,
+          const SizedBox(height: 6),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
           ),
         ],
       ),
@@ -628,8 +659,82 @@ class _AccountRow extends StatelessWidget {
   );
 }
 
+/// Searchable list of every bank the provider supports in the user's country.
+class _BankPicker extends ConsumerStatefulWidget {
+  const _BankPicker();
+  @override
+  ConsumerState<_BankPicker> createState() => _BankPickerState();
+}
+
+class _BankPickerState extends ConsumerState<_BankPicker> {
+  String _q = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final banks = ref.watch(banksProvider);
+    final shown = (banks.value ?? []).where((b) => b.toLowerCase().contains(_q.toLowerCase())).toList();
+    final mq = MediaQuery.of(context);
+    return SizedBox(
+      // 60% of the screen, or 70% of what's left above the keyboard, so the title never reaches the status bar.
+      height: math.min(mq.size.height * 0.6, (mq.size.height - mq.viewInsets.bottom) * 0.7),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+            child: Text('Connect your bank', style: display(20)),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: TextField(
+              onChanged: (v) => setState(() => _q = v.trim()),
+              decoration: const InputDecoration(hintText: 'Search banks', prefixIcon: Icon(CupertinoIcons.search, size: 18)),
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (!banks.isLoading && shown.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                banks.hasError ? 'Couldn\'t load banks: ${functionError(banks.error!)}' : (_q.isEmpty ? 'No banks available to connect yet.' : 'No banks match "$_q".'),
+                textAlign: TextAlign.center,
+                style: caption,
+              ),
+            ),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+              itemCount: shown.length,
+              itemBuilder: (_, i) => Pressable(
+                scale: 0.99,
+                onTap: () async {
+                  await _connect(context, shown[i]);
+                  if (context.mounted) Navigator.of(context).pop();
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  child: Row(
+                    children: [
+                      _BankMark(shown[i], providerColorFor(shown[i]), size: 36),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Text(shown[i], style: const TextStyle(fontWeight: FontWeight.w500)),
+                      ),
+                      const Icon(CupertinoIcons.chevron_right, color: kFaint, size: 18),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _BankMark extends StatelessWidget {
-  const _BankMark(this.name, this.color, {super.key, this.size = 40});
+  const _BankMark(this.name, this.color, {this.size = 40});
   final String name;
   final Color color;
   final double size;
@@ -648,179 +753,6 @@ class _BankMark extends StatelessWidget {
       ),
     ),
   );
-}
-
-const _currencies = ['GBP', 'USD', 'EUR', 'GHS', 'NGN', 'KES', 'ZAR', 'CAD', 'AUD', 'CHF', 'JPY', 'INR', 'AED'];
-const _bankSuggestions = [
-  'Revolut',
-  'Wise',
-  'Lloyds',
-  'PayPal',
-  'Monzo',
-  'Starling',
-  'Barclays',
-  'HSBC',
-  'NatWest',
-  'Santander',
-  'Halifax',
-  'Nationwide',
-  'Chase UK',
-  'Amex',
-];
-
-/// Add or edit a manually tracked account (any bank, card or wallet).
-class AccountForm extends StatefulWidget {
-  const AccountForm({super.key, this.account});
-  final PaymentSource? account;
-  @override
-  State<AccountForm> createState() => _AccountFormState();
-}
-
-class _AccountFormState extends State<AccountForm> {
-  late final _bank = TextEditingController(text: widget.account?.bank ?? '');
-  late final _name = TextEditingController(text: widget.account == null || widget.account!.name == widget.account!.bank ? '' : widget.account!.name);
-  late final _balance = TextEditingController(text: widget.account?.balance.toStringAsFixed(2) ?? '');
-  late String _currency = widget.account?.currency ?? 'GBP';
-  bool _confirmDelete = false, _busy = false;
-
-  bool get _editing => widget.account != null;
-  bool get _linked => widget.account != null && !widget.account!.isManual;
-
-  Future<void> _save() async {
-    final balance = double.tryParse(_balance.text.replaceAll(',', ''));
-    if (_bank.text.trim().isEmpty || balance == null) {
-      showError(context, 'Add the bank name and current balance');
-      return;
-    }
-    setState(() => _busy = true);
-    try {
-      await saveAccount(id: widget.account?.id, bank: _bank.text, name: _name.text, currency: _currency, balance: balance);
-      if (mounted) showToast(context, _editing ? 'Account updated' : 'Added ${_bank.text.trim()}');
-    } catch (e) {
-      if (mounted) showError(context, 'Couldn\'t save: $e');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _delete() async {
-    if (!_confirmDelete) {
-      HapticFeedback.mediumImpact();
-      setState(() => _confirmDelete = true);
-      return;
-    }
-    await deleteAccount(widget.account!.id);
-    if (mounted) showToast(context, 'Account removed');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final preview = PaymentSource({
-      'id': '',
-      'provider': knownBanks.contains(_bank.text.trim().toLowerCase()) ? _bank.text.trim().toLowerCase() : 'other',
-      'institution': _bank.text.trim(),
-      'account_name': _name.text,
-      'currency': _currency,
-    });
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 4, 4, 16),
-            child: Row(
-              children: [
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  child: _BankMark(preview.bank, preview.color, key: ValueKey(preview.bank), size: 44),
-                ),
-                const SizedBox(width: 12),
-                Text(_editing ? 'Edit account' : 'New account', style: display(24)),
-              ],
-            ),
-          ),
-          if (_linked)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 12),
-              child: Text('This account syncs through Open Banking; manual changes are overwritten on the next sync.', style: caption),
-            ),
-          const Text('Bank or wallet', style: caption),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _bank,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(hintText: 'e.g. Monzo'),
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 34,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: _bankSuggestions.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 6),
-              itemBuilder: (_, i) => Pressable(
-                onTap: () => setState(() => _bank.text = _bankSuggestions[i]),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: kSurfaceHi,
-                    borderRadius: BorderRadius.circular(17),
-                    border: Border.all(color: kLine),
-                  ),
-                  child: Text(_bankSuggestions[i], style: const TextStyle(fontSize: 12, color: kMuted)),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          const Text('Account nickname (optional)', style: caption),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _name,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(hintText: 'Current, Savings, Joint…'),
-          ),
-          const SizedBox(height: 14),
-          const Text('Current balance', style: caption),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _balance,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                  style: const TextStyle(fontFeatures: tabular),
-                  decoration: const InputDecoration(hintText: '0.00'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 110,
-                child: SelectField<String>(
-                  title: 'Currency',
-                  options: currencyOptions(_currencies),
-                  value: _currency,
-                  onChanged: (v) => setState(() => _currency = v),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          FilledButton(onPressed: _busy ? null : _save, child: Text(_editing ? 'Save changes' : 'Add account')),
-          if (_editing) ...[
-            const SizedBox(height: 8),
-            TextButton(
-              onPressed: _delete,
-              child: Text(_confirmDelete ? 'Tap again to remove — its items stay, unassigned' : 'Remove account', style: const TextStyle(color: kCrimson)),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
 }
 
 // ───────── Sheets ─────────
@@ -1151,7 +1083,7 @@ class _SignInState extends State<SignInScreen> {
               Text('Every renewal,\nbefore it hits.', style: display(38)),
               const SizedBox(height: 12),
               const Text(
-                'Subscriptions, free trials, Pay in 3 and balances across Revolut, Wise, Lloyds and PayPal.',
+                'Subscriptions, free trials, Pay in 3 and every account balance, in one place.',
                 style: TextStyle(color: kMuted, height: 1.4),
               ),
               const Spacer(flex: 3),

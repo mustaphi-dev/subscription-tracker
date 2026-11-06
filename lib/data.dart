@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -142,9 +143,52 @@ final baseCurrencyProvider = StreamProvider<String>((ref) {
   final uid = db.auth.currentUser?.id;
   if (uid == null) return Stream.value('GBP');
   return db.from('profiles').stream(primaryKey: ['id']).eq('id', uid).map(
-        (rows) => rows.isEmpty ? 'GBP' : rows.first['global_base_currency'] as String,
+        (rows) => rows.isEmpty ? 'GBP' : isoCurrency(rows.first['global_base_currency'] as String?),
       );
 });
+
+/// [raw] as a clean ISO 4217 code, or GBP if it isn't one (so money never renders as "G12.00").
+String isoCurrency(String? raw) {
+  final c = (raw ?? '').trim().toUpperCase();
+  return RegExp(r'^[A-Z]{3}$').hasMatch(c) ? c : 'GBP';
+}
+
+/// The user's country code (null until picked after sign-up).
+final countryProvider = StreamProvider<String?>((ref) {
+  ref.watch(authProvider);
+  final uid = db.auth.currentUser?.id;
+  if (uid == null) return Stream.value(null);
+  return db.from('profiles').stream(primaryKey: ['id']).eq('id', uid).map(
+        (rows) => rows.isEmpty ? null : rows.first['country'] as String?,
+      );
+});
+
+/// True once we know the signed-in user hasn't picked a country yet; drives the router.
+final needsCountry = ValueNotifier(false);
+
+Future<void> refreshNeedsCountry() async {
+  final uid = db.auth.currentUser?.id;
+  if (uid == null) {
+    needsCountry.value = false;
+    return;
+  }
+  try {
+    final row = await db.from('profiles').select('country').eq('id', uid).maybeSingle();
+    needsCountry.value = row != null && row['country'] == null;
+  } catch (_) {
+    // Offline or schema not migrated yet: don't trap the user on the picker.
+    needsCountry.value = false;
+  }
+}
+
+/// Saves the country; on first pick also sets the display currency to the local one.
+Future<void> setCountry(String code, {String? currency}) async {
+  await db.from('profiles').update({
+    'country': code,
+    'global_base_currency': ?currency,
+  }).eq('id', db.auth.currentUser!.id);
+  needsCountry.value = false;
+}
 
 final sourcesProvider = StreamProvider<List<PaymentSource>>((ref) {
   ref.watch(authProvider);
@@ -212,27 +256,17 @@ Future<void> setBaseCurrency(String ccy) =>
 
 Future<void> addItem(Map<String, dynamic> row) => db.from('financial_items').insert(row);
 
-const knownBanks = {'revolut', 'wise', 'lloyds', 'paypal'};
+/// Banks the user can link in their country (empty where bank sync isn't offered).
+final banksProvider = FutureProvider<List<String>>((ref) async {
+  final country = await ref.watch(countryProvider.future);
+  if (country == null) return [];
+  final res = await db.functions.invoke('bank-sync/banks');
+  return [for (final b in res.data['banks'] as List) b['name'] as String];
+});
 
-/// Manual account for any bank. Known names map onto their provider so they get its colour and filter.
-Future<void> saveAccount({String? id, required String bank, required String name, required String currency, required double balance}) {
-  final key = bank.trim().toLowerCase();
-  final row = {
-    'provider': knownBanks.contains(key) ? key : 'other',
-    'institution': bank.trim(),
-    'account_name': name.trim().isEmpty ? bank.trim() : name.trim(),
-    'currency': currency,
-    'current_balance': balance,
-    'is_manual': true,
-    'last_synced_at': DateTime.now().toUtc().toIso8601String(),
-  };
-  return id == null ? db.from('payment_sources').insert(row) : db.from('payment_sources').update(row).eq('id', id);
-}
-
-Future<void> deleteAccount(String id) => db.from('payment_sources').delete().eq('id', id);
-
-Future<String> connectBank(String provider) async {
-  final res = await db.functions.invoke('bank-sync/connect', body: {'provider': provider});
+/// Starts a consent with [bank] (a name from [banksProvider]); returns the bank's URL to open.
+Future<String> connectBank(String bank) async {
+  final res = await db.functions.invoke('bank-sync/connect', body: {'bank': bank});
   return res.data['link'] as String;
 }
 

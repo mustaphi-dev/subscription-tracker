@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import 'countries.dart';
+import 'country.dart';
 import 'data.dart';
 import 'home.dart';
 import 'lock.dart';
@@ -31,6 +33,7 @@ class _ProfileState extends ConsumerState<ProfileScreen> {
   Widget build(BuildContext context) {
     final user = db.auth.currentUser;
     final base = ref.watch(baseCurrencyProvider).value ?? 'GBP';
+    final country = ref.watch(countryProvider).value;
     final sources = ref.watch(sourcesProvider).value ?? [];
     final items = (ref.watch(itemsProvider).value ?? []).where((i) => i.status == 'active').toList();
     final trials = items.where((i) => i.isTrial).length;
@@ -128,8 +131,15 @@ class _ProfileState extends ConsumerState<ProfileScreen> {
             SliverToBoxAdapter(
               child: group([
                 row(CupertinoIcons.arrow_right_arrow_left_circle, 'Display currency',
-                    sub: currencies.where((c) => c.$1 == base).firstOrNull?.$3 ?? base,
+                    sub: currencyChoices(base).where((c) => c.$1 == base).firstOrNull?.$3 ?? base,
                     trailing: CurrencyPill(current: base, onChanged: setBaseCurrency)),
+                row(CupertinoIcons.globe, 'Country',
+                    sub: switch (countryByCode(country)) {
+                      null => 'Not set',
+                      final c => '${c.flag}  ${c.name}${c.bankLinking ? ' · Bank sync available' : ''}',
+                    },
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => CountryScreen(current: country ?? ''))),
+                ),
                 row(CupertinoIcons.creditcard, 'Manage accounts', sub: '${sources.length} connected or manual', onTap: () {
                   ref.read(tabProvider.notifier).set(2);
                   context.pop();

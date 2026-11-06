@@ -1,36 +1,19 @@
-// Open Banking via GoCardless Bank Account Data (covers Lloyds, Revolut, Wise and PayPal).
-// Routes: POST /connect (user), GET /callback (browser redirect), POST /sync (user), POST /sync-all (cron).
+// Open Banking account linking. The provider for each country lives in ./aggregators.
+// Routes: POST /banks, POST /connect, POST /sync (user); GET /callback (browser redirect); POST /sync-all (cron).
 import { admin, env, isServiceCall, json, money, sendPush, userFrom } from "../_shared/mod.ts";
+import { enableBanking } from "./aggregators/enablebanking.ts";
+import { gocardless } from "./aggregators/gocardless.ts";
+import type { Aggregator, Txn } from "./aggregators/types.ts";
 
-const GC = "https://bankaccountdata.gocardless.com/api/v2";
-const INSTITUTIONS: Record<string, string> = {
-  lloyds: "LLOYDS_LOYDGB2L",
-  revolut: "REVOLUT_REVOGB21",
-  wise: "WISE_TRWIGB22",
-  paypal: "PAYPAL_PPLXLULL",
-};
-
-let gcToken: { value: string; exp: number } | null = null;
-async function gc(path: string, init: RequestInit = {}) {
-  if (!gcToken || gcToken.exp < Date.now() + 60_000) {
-    const r = await fetch(`${GC}/token/new/`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ secret_id: env("GOCARDLESS_SECRET_ID"), secret_key: env("GOCARDLESS_SECRET_KEY") }),
-    }).then((r) => r.json());
-    gcToken = { value: r.access, exp: Date.now() + r.access_expires * 1000 };
-  }
-  const res = await fetch(`${GC}${path}`, {
-    ...init,
-    headers: { authorization: `Bearer ${gcToken.value}`, "content-type": "application/json", ...init.headers },
-  });
-  if (!res.ok) throw new Error(`gocardless ${path} ${res.status}: ${await res.text()}`);
-  return res.json();
-}
+// New links use the first provider covering the user's country; older links keep their own.
+const AGGREGATORS: Aggregator[] = [enableBanking, gocardless];
+const byId = (id: string) => AGGREGATORS.find((a) => a.id === id);
+const forCountry = (c: string | null) => AGGREGATORS.find((a) => c != null && a.countries.includes(c));
 
 Deno.serve(async (req) => {
   const route = new URL(req.url).pathname.split("/").pop();
   try {
+    if (route === "banks") return await banks(req);
     if (route === "connect") return await connect(req);
     if (route === "callback") return await callback(req);
     if (route === "sync") {
@@ -46,35 +29,60 @@ Deno.serve(async (req) => {
     }
     return json({ error: "not found" }, 404);
   } catch (e) {
+    // Provider errors can carry ids and internals; log them, don't hand them to the app.
     console.error(e);
-    return json({ error: String(e) }, 500);
+    return json({ error: "Something went wrong talking to your bank. Try again in a minute." }, 500);
   }
 });
+
+/** The signed-in user's country and the provider that serves it, if any. */
+async function userAggregator(uid: string) {
+  const { data: profile } = await admin.from("profiles").select("country").eq("id", uid).single();
+  const country: string | null = profile?.country ?? null;
+  return { country, agg: forCountry(country) };
+}
+
+const UNAVAILABLE = "Automatic bank sync isn't available in your country yet. You can add accounts manually.";
+
+async function banks(req: Request) {
+  const uid = await userFrom(req);
+  if (!uid) return json({ error: "unauthorised" }, 401);
+  const { country, agg } = await userAggregator(uid);
+  if (!agg) return json({ error: UNAVAILABLE }, 400);
+  return json({ banks: await agg.listBanks(country!) });
+}
 
 async function connect(req: Request) {
   const uid = await userFrom(req);
   if (!uid) return json({ error: "unauthorised" }, 401);
-  const { provider } = await req.json();
-  const institution_id = INSTITUTIONS[provider];
-  if (!institution_id) return json({ error: "unknown provider" }, 400);
+  const { bank } = await req.json();
+  const { country, agg } = await userAggregator(uid);
+  if (!agg) return json({ error: UNAVAILABLE }, 400);
+  if (!(await agg.listBanks(country!)).some((b) => b.name === bank)) return json({ error: "unknown bank" }, 400);
 
   const reference = crypto.randomUUID();
-  const reqn = await gc("/requisitions/", {
-    method: "POST",
-    body: JSON.stringify({
-      institution_id, reference, user_language: "EN",
-      redirect: `${env("SUPABASE_URL")}/functions/v1/bank-sync/callback`,
-    }),
+  const { externalId, link } = await agg.createLink({
+    bank, country: country!, reference,
+    redirect: `${env("SUPABASE_URL")}/functions/v1/bank-sync/callback`,
   });
-  await admin.from("bank_connections").insert({ user_id: uid, provider, reference, requisition_id: reqn.id });
-  return json({ link: reqn.link });
+  // `provider` holds the bank's display name for links made from here on.
+  await admin.from("bank_connections").insert({ user_id: uid, provider: bank, reference, aggregator: agg.id, external_id: externalId });
+  return json({ link });
 }
 
 async function callback(req: Request) {
-  const ref = new URL(req.url).searchParams.get("ref");
-  const { data: conn } = await admin.from("bank_connections").select().eq("reference", ref).eq("status", "pending").single();
+  const q = new URL(req.url).searchParams;
+  const ref = q.get("ref") ?? q.get("state");
+  const { data: conn } = await admin.from("bank_connections").select().eq("reference", ref).eq("status", "pending").maybeSingle();
   if (!conn) return new Response("Unknown or used link", { status: 400 });
-  await admin.from("bank_connections").update({ status: "linked" }).eq("id", conn.id);
+
+  // The redirect fires whether or not the user approved, so ask the provider what actually happened.
+  const { externalId, status } = await byId(conn.aggregator)!.completeLink(conn.external_id, q);
+  if (status !== "linked") {
+    if (status !== "pending") await admin.from("bank_connections").update({ status }).eq("id", conn.id);
+    return Response.redirect("subtracker://bank-connected?status=failed", 302);
+  }
+  await admin.from("bank_connections").update({ status: "linked", external_id: externalId }).eq("id", conn.id);
   await syncUser(conn.user_id).catch(console.error);
   return Response.redirect("subtracker://bank-connected", 302);
 }
@@ -83,52 +91,50 @@ async function syncUser(uid: string) {
   const { data: conns } = await admin.from("bank_connections").select().eq("user_id", uid).eq("status", "linked");
   let accounts = 0;
   for (const conn of conns ?? []) {
-    const reqn = await gc(`/requisitions/${conn.requisition_id}/`);
-    if (reqn.status === "EX" || reqn.status === "RJ") {
+    const agg = byId(conn.aggregator);
+    if (!agg) continue;
+    const s = await agg.status(conn.external_id);
+    if (s.status === "expired" || s.status === "rejected") {
       await admin.from("bank_connections").update({ status: "expired" }).eq("id", conn.id);
       continue;
     }
-    for (const accId of reqn.accounts as string[]) {
-      await syncAccount(uid, conn.provider, accId);
+    for (const accId of s.accounts) {
+      await syncAccount(uid, agg, conn.provider, accId);
       accounts++;
     }
   }
   return { accounts };
 }
 
-// ponytail: GoCardless rate-limits to ~4 calls/account/endpoint/day; cron runs every 6h to fit.
-async function syncAccount(uid: string, provider: string, accId: string) {
-  const [{ account }, { balances }, { transactions }] = await Promise.all([
-    gc(`/accounts/${accId}/details/`),
-    gc(`/accounts/${accId}/balances/`),
-    gc(`/accounts/${accId}/transactions/`),
-  ]);
-  const bal = balances.find((b: any) => b.balanceType === "interimAvailable") ?? balances[0];
+// Banks the app has its own colour and label for; everything else is "other" plus its name.
+const KNOWN = ["revolut", "wise", "lloyds", "paypal"];
+const providerKey = (bank: string) => KNOWN.find((k) => bank.toLowerCase().includes(k)) ?? "other";
+
+async function syncAccount(uid: string, agg: Aggregator, bank: string, accId: string) {
+  const { account, transactions } = await agg.fetchAccount(accId);
   const { data: source } = await admin.from("payment_sources").upsert({
-    user_id: uid, provider, external_account_id: accId,
-    account_name: account.name ?? account.ownerName ?? `${provider} ${bal.balanceAmount.currency}`,
-    current_balance: Number(bal.balanceAmount.amount),
-    currency: bal.balanceAmount.currency,
+    user_id: uid, provider: providerKey(bank), institution: bank, external_account_id: accId,
+    account_name: account.name,
+    current_balance: account.balance,
+    currency: account.currency,
     last_synced_at: new Date().toISOString(),
   }, { onConflict: "user_id,external_account_id" }).select().single();
 
   const { data: existing } = await admin.from("financial_items").select("merchant_name").eq("user_id", uid);
   const known = new Set((existing ?? []).map((i) => norm(i.merchant_name)));
 
-  await detectCardChecks(uid, source!.id, transactions.pending ?? [], known);
-  await detectRecurring(uid, source!.id, transactions.booked ?? [], known);
+  await detectCardChecks(uid, source!.id, transactions.filter((t) => t.pending), known);
+  await detectRecurring(uid, source!.id, transactions.filter((t) => !t.pending), known);
 }
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z ]/g, "").replace(/\s+/g, " ").trim();
-const merchantOf = (t: any) => t.creditorName ?? t.remittanceInformationUnstructured ?? "Unknown";
-const amountOf = (t: any) => Number(t.transactionAmount.amount);
 
 /** £0.00 / £1.00 pending authorisations from an unknown merchant = probable free-trial card check. */
-async function detectCardChecks(uid: string, sourceId: string, pending: any[], known: Set<string>) {
+async function detectCardChecks(uid: string, sourceId: string, pending: Txn[], known: Set<string>) {
   for (const t of pending) {
-    const amt = amountOf(t);
+    const amt = t.amount;
     if (amt > 0 || amt < -1) continue;
-    const name = merchantOf(t);
+    const name = t.merchant;
     if (known.has(norm(name))) continue;
     known.add(norm(name));
 
@@ -137,7 +143,7 @@ async function detectCardChecks(uid: string, sourceId: string, pending: any[], k
     const trialEnd = new Date(Date.now() + 7 * 864e5); // ponytail: assume 7-day trial until user confirms
     const { data: item } = await admin.from("financial_items").insert({
       user_id: uid, payment_source_id: sourceId, item_type: "free_trial", merchant_name: name,
-      original_amount: 0, original_currency: price?.currency ?? t.transactionAmount.currency,
+      original_amount: 0, original_currency: price?.currency ?? t.currency,
       post_trial_amount: price?.amount ?? null, billing_cycle: price?.billing_cycle ?? "monthly",
       cancellation_url: price?.cancellation_url ?? null, trial_end_date: trialEnd.toISOString(),
       status: "pending_confirmation", auto_detected_via: "open_banking",
@@ -155,29 +161,29 @@ async function detectCardChecks(uid: string, sourceId: string, pending: any[], k
 }
 
 /** ≥2 debits to the same merchant, similar amount, ~monthly apart = subscription. */
-async function detectRecurring(uid: string, sourceId: string, booked: any[], known: Set<string>) {
-  const groups = new Map<string, any[]>();
+async function detectRecurring(uid: string, sourceId: string, booked: Txn[], known: Set<string>) {
+  const groups = new Map<string, Txn[]>();
   for (const t of booked) {
-    if (amountOf(t) >= 0) continue;
-    const k = norm(merchantOf(t));
+    if (t.amount >= 0) continue;
+    const k = norm(t.merchant);
     if (!known.has(k)) groups.set(k, [...(groups.get(k) ?? []), t]);
   }
   for (const txs of groups.values()) {
     if (txs.length < 2) continue;
-    txs.sort((a, b) => a.bookingDate.localeCompare(b.bookingDate));
+    txs.sort((a, b) => a.date.localeCompare(b.date));
     const [prev, last] = txs.slice(-2);
-    const gapDays = (Date.parse(last.bookingDate) - Date.parse(prev.bookingDate)) / 864e5;
-    const sameAmount = Math.abs(amountOf(last) - amountOf(prev)) <= Math.abs(amountOf(prev)) * 0.1;
+    const gapDays = (Date.parse(last.date) - Date.parse(prev.date)) / 864e5;
+    const sameAmount = Math.abs(last.amount - prev.amount) <= Math.abs(prev.amount) * 0.1;
     if (gapDays < 25 || gapDays > 35 || !sameAmount) continue;
 
-    const next = new Date(last.bookingDate);
+    const next = new Date(last.date);
     next.setMonth(next.getMonth() + 1);
     await admin.from("financial_items").insert({
       user_id: uid, payment_source_id: sourceId, item_type: "subscription",
-      merchant_name: merchantOf(last), original_amount: Math.abs(amountOf(last)),
-      original_currency: last.transactionAmount.currency, billing_cycle: "monthly",
+      merchant_name: last.merchant, original_amount: Math.abs(last.amount),
+      original_currency: last.currency, billing_cycle: "monthly",
       next_renewal_date: next.toISOString().slice(0, 10), auto_detected_via: "open_banking",
-      total_spent: txs.reduce((s, t) => s + Math.abs(amountOf(t)), 0),
+      total_spent: txs.reduce((s, t) => s + Math.abs(t.amount), 0),
     });
   }
 }
