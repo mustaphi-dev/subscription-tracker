@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:subtracker/data.dart';
-import 'package:subtracker/forwarding.dart';
+import 'package:wince/data.dart';
+import 'package:wince/forwarding.dart';
 
 void main() {
   testWidgets('guide shows the steps and copies the address', (t) async {
