@@ -69,7 +69,8 @@ const txn = (t: any): Txn => {
 
 export const enableBanking: Aggregator = {
   id: "enablebanking",
-  countries: ["GB"],
+  // GB isn't live for us yet (activation offers only EEA countries); TrueLayer serves the UK.
+  countries: [],
 
   async listBanks(country) {
     return (await aspsps(country))
@@ -110,7 +111,7 @@ export const enableBanking: Aggregator = {
     return { status: expired ? "expired" : STATUS[s.status] ?? "pending", accounts };
   },
 
-  async fetchAccount(uid) {
+  async fetchAccount(_consent, uid) {
     const from = new Date(Date.now() - HISTORY_DAYS * 864e5).toISOString().slice(0, 10);
     const [details, { balances }] = await Promise.all([eb(`/accounts/${uid}/details`), eb(`/accounts/${uid}/balances`)]);
 

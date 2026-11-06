@@ -64,7 +64,7 @@ export const gocardless: Aggregator = {
   },
 
   // ponytail: GoCardless rate-limits to ~4 calls/account/endpoint/day; cron runs every 6h to fit.
-  async fetchAccount(id) {
+  async fetchAccount(_consent, id) {
     const [{ account }, { balances }, { transactions }] = await Promise.all([
       gc(`/accounts/${id}/details/`),
       gc(`/accounts/${id}/balances/`),

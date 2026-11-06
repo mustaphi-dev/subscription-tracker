@@ -2,11 +2,12 @@
 // Routes: POST /banks, POST /connect, POST /sync (user); GET /callback (browser redirect); POST /sync-all (cron).
 import { admin, env, isServiceCall, json, money, sendPush, userFrom } from "../_shared/mod.ts";
 import { enableBanking } from "./aggregators/enablebanking.ts";
+import { trueLayer } from "./aggregators/truelayer.ts";
 import { gocardless } from "./aggregators/gocardless.ts";
 import type { Aggregator, Txn } from "./aggregators/types.ts";
 
 // New links use the first provider covering the user's country; older links keep their own.
-const AGGREGATORS: Aggregator[] = [enableBanking, gocardless];
+const AGGREGATORS: Aggregator[] = [trueLayer, enableBanking, gocardless];
 const byId = (id: string) => AGGREGATORS.find((a) => a.id === id);
 const forCountry = (c: string | null) => AGGREGATORS.find((a) => c != null && a.countries.includes(c));
 
@@ -99,7 +100,7 @@ async function syncUser(uid: string) {
       continue;
     }
     for (const accId of s.accounts) {
-      await syncAccount(uid, agg, conn.provider, accId);
+      await syncAccount(uid, agg, conn.provider, conn.external_id, accId);
       accounts++;
     }
   }
@@ -110,8 +111,8 @@ async function syncUser(uid: string) {
 const KNOWN = ["revolut", "wise", "lloyds", "paypal"];
 const providerKey = (bank: string) => KNOWN.find((k) => bank.toLowerCase().includes(k)) ?? "other";
 
-async function syncAccount(uid: string, agg: Aggregator, bank: string, accId: string) {
-  const { account, transactions } = await agg.fetchAccount(accId);
+async function syncAccount(uid: string, agg: Aggregator, bank: string, consent: string, accId: string) {
+  const { account, transactions } = await agg.fetchAccount(consent, accId);
   const { data: source } = await admin.from("payment_sources").upsert({
     user_id: uid, provider: providerKey(bank), institution: bank, external_account_id: accId,
     account_name: account.name,
