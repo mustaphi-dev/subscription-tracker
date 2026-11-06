@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
+// Supabase stores its session through shared_preferences, so the test mocks it.
+// ignore: depend_on_referenced_packages
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:subtracker/data.dart';
 import 'package:subtracker/screens.dart';
@@ -20,6 +22,8 @@ void main() {
         sourcesProvider.overrideWith((_) => Stream.value([])),
         baseCurrencyProvider.overrideWith((_) => Stream.value('GBP')),
         countryProvider.overrideWith((_) => Stream.value('GB')),
+        shortfallProvider.overrideWith((_) async => <Shortfall>[]),
+        itemsProvider.overrideWith((_) => Stream.value([])),
         banksProvider.overrideWith((_) async => ['Monzo Bank', 'Revolut', 'Royal Bank of Scotland']),
       ],
       child: const MaterialApp(home: Scaffold(body: AccountsTab())),

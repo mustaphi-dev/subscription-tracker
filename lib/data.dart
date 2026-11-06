@@ -224,24 +224,14 @@ class _Pick extends Notifier<int> {
   void set(int i) => state = i;
 }
 
-/// Selected account id (null = all accounts).
-class _SourcePick extends Notifier<String?> {
-  @override
-  String? build() => null;
-  void set(String? id) => state = id;
-}
-
 const typeFilters = [null, 'free_trial', 'subscription', 'installment', 'income'];
-final sourceFilterProvider = NotifierProvider<_SourcePick, String?>(_SourcePick.new);
 final typeFilterProvider = NotifierProvider<_Pick, int>(_Pick.new);
 
 final filteredItemsProvider = Provider<List<FinancialItem>>((ref) {
   final items = ref.watch(itemsProvider).value ?? [];
-  final source = ref.watch(sourceFilterProvider);
   final t = typeFilters[ref.watch(typeFilterProvider)];
   return items
       .where((i) => i.status == 'active' || i.status == 'pending_confirmation')
-      .where((i) => source == null || i.sourceId == source)
       .where((i) => t == null || i.type == t)
       .toList();
 });
@@ -271,6 +261,11 @@ Future<String> connectBank(String bank) async {
 }
 
 Future<void> syncBanks() => db.functions.invoke('bank-sync/sync');
+
+/// Unlinks an Open Banking bank on the server, so the next sync doesn't bring its accounts back.
+Future<void> unlinkBank(String bank) => db.functions.invoke('bank-sync/disconnect', body: {'bank': bank});
+
+Future<void> removeAccounts(Iterable<String> ids) => db.from('payment_sources').delete().inFilter('id', ids.toList());
 
 Future<Map<String, dynamic>> parseReceipt(Map<String, dynamic> body) async =>
     (await db.functions.invoke('parse-trial-receipt', body: body)).data as Map<String, dynamic>;

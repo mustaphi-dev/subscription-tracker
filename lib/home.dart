@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -43,11 +44,9 @@ class ShellScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tab = ref.watch(tabProvider);
     final compact = ref.watch(navCompactProvider);
-    final focused = ref.watch(sourceFilterProvider);
-    final accent = (ref.watch(sourcesProvider).value ?? []).where((s) => s.id == focused).firstOrNull?.color;
     return Scaffold(
       body: Ambient(
-        color: accent ?? kAccent,
+        color: kAccent,
         child: Stack(children: [
           IndexedStack(
             index: tab,
@@ -193,6 +192,7 @@ class TopBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final base = ref.watch(baseCurrencyProvider).value ?? 'GBP';
+    final alert = ref.watch(alertsProvider).isNotEmpty;
     final bar = SafeArea(
       bottom: false,
       child: SizedBox(
@@ -218,8 +218,11 @@ class TopBar extends ConsumerWidget {
               button: true,
               label: 'Upcoming',
               child: Pressable(
-                onTap: () => showSheet(context, const AlertsSheet()),
-                child: const Padding(padding: EdgeInsets.all(8), child: Icon(CupertinoIcons.bell)),
+                onTap: () => showDraggableSheet(context, (scroll) => AlertsSheet(scroll: scroll)),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Badge(isLabelVisible: alert, smallSize: 8, backgroundColor: kCrimson, child: const Icon(CupertinoIcons.bell)),
+                ),
               ),
             ),
           ]),
@@ -339,16 +342,21 @@ class DashboardTab extends ConsumerWidget {
             out: out,
           ),
         ),
-        const SliverToBoxAdapter(child: ShortfallAlerts()),
-        const SliverToBoxAdapter(child: AccountStrip()),
         if (all.isNotEmpty) SliverToBoxAdapter(child: _NextDays(items: items, base: base)),
         if (trials.isNotEmpty) SliverToBoxAdapter(child: _TrialRings(trials, base)),
-        if (all.isEmpty) const SliverToBoxAdapter(child: _EmptyState()) else ..._upcoming(ref, items),
+        if (all.isEmpty) const SliverToBoxAdapter(child: _EmptyState()) else ...upcomingSlivers(context, ref, items, limit: 6),
       ],
     );
   }
 
-  List<Widget> _upcoming(WidgetRef ref, List<FinancialItem> items) {
+}
+
+/// Upcoming charges grouped by when they're due. With [limit], shows only the soonest few plus a "See all" link.
+/// [controls] replaces the type tabs, e.g. with the full page's search and filter.
+List<Widget> upcomingSlivers(BuildContext context, WidgetRef ref, List<FinancialItem> items, {int? limit, Widget? controls}) {
+    final more = limit != null && items.length > limit;
+    final all = items;
+    if (more) items = items.take(limit).toList(); // already sorted soonest first
     final now = DateTime.now();
     final endOfMonth = DateTime(now.year, now.month + 1, 1);
     final groups = <String, List<FinancialItem>>{'Next 24 hours': [], 'This week': [], 'Later this month': [], 'Later': []};
@@ -366,15 +374,16 @@ class DashboardTab extends ConsumerWidget {
           .add(i);
     }
     return [
-      const SliverToBoxAdapter(child: SectionHeader('Upcoming')),
+      if (limit != null) const SliverToBoxAdapter(child: SectionHeader('Upcoming')),
       SliverToBoxAdapter(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Segmented(
-            labels: const ['All', 'Trials', 'Subs', 'Pay later', 'Income'],
-            selected: ref.watch(typeFilterProvider),
-            onSelect: ref.read(typeFilterProvider.notifier).set,
-          ),
+          child: controls ??
+              Segmented(
+                labels: _typeLabels,
+                selected: ref.watch(typeFilterProvider),
+                onSelect: ref.read(typeFilterProvider.notifier).set,
+              ),
         ),
       ),
       if (items.isEmpty)
@@ -399,9 +408,93 @@ class DashboardTab extends ConsumerWidget {
             ]),
           ),
         ),
-        SliverToBoxAdapter(child: ItemGroup(e.value).animate().fadeIn(duration: 300.ms).slideY(begin: 0.04, curve: springOut)),
+        SliverToBoxAdapter(child: ItemGroup(e.value, sheet: controls != null).animate().fadeIn(duration: 300.ms).slideY(begin: 0.04, curve: springOut)),
       ],
+      if (more)
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: OutlinedButton(onPressed: () => context.push('/upcoming'), child: Text('See all ${all.length}')),
+          ),
+        ),
     ];
+}
+
+const _typeLabels = ['All', 'Trials', 'Subs', 'Pay later', 'Income'];
+
+/// Every upcoming item, reached from "See all" on Home. Search by name; the filter shares Home's type tabs.
+class UpcomingScreen extends ConsumerStatefulWidget {
+  const UpcomingScreen({super.key});
+  @override
+  ConsumerState<UpcomingScreen> createState() => _UpcomingScreenState();
+}
+
+class _UpcomingScreenState extends ConsumerState<UpcomingScreen> {
+  String _q = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final type = ref.watch(typeFilterProvider);
+    final items = ref.watch(filteredItemsProvider).where((i) => i.merchant.toLowerCase().contains(_q.toLowerCase())).toList();
+    final controls = Row(children: [
+      Expanded(child: GlassSearchField(hint: 'Search', onChanged: (v) => setState(() => _q = v))),
+      const SizedBox(width: 10),
+      Semantics(
+        button: true,
+        label: 'Filter: ${_typeLabels[type]}',
+        child: Pressable(
+          onTap: () async {
+            final picked = await pickFromSheet<int>(
+              context,
+              title: 'Show',
+              options: [for (final (k, l) in _typeLabels.indexed) (k, l, null)],
+              selected: type,
+            );
+            if (picked != null) ref.read(typeFilterProvider.notifier).set(picked);
+          },
+          child: Glass(
+            radius: 24,
+            tint: type == 0 ? const Color(0x1AFFFFFF) : kAccent.withValues(alpha: 0.25),
+            child: Container(
+              height: 48,
+              constraints: const BoxConstraints(minWidth: 48),
+              padding: const EdgeInsets.symmetric(horizontal: 15),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(CupertinoIcons.slider_horizontal_3, size: 18),
+                if (type != 0) ...[
+                  const SizedBox(width: 6),
+                  Text(_typeLabels[type], style: const TextStyle(fontWeight: FontWeight.w600)),
+                ],
+              ]),
+            ),
+          ),
+        ),
+      ),
+    ]);
+    return Scaffold(
+      body: Ambient(
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          slivers: [
+            SliverToBoxAdapter(
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 0, 24, 12),
+                  child: Row(children: [
+                    IconButton(tooltip: 'Back', icon: const Icon(CupertinoIcons.chevron_left, size: 20), onPressed: () => context.pop()),
+                    Text('Upcoming', style: display(20)),
+                  ]),
+                ),
+              ),
+            ),
+            ...upcomingSlivers(context, ref, items, controls: controls),
+            const SliverToBoxAdapter(child: SizedBox(height: 40)),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -444,134 +537,124 @@ class _Pill extends StatelessWidget {
       );
 }
 
+/// Notifications the user cleared, kept on the device. Keys include the due date, so the next
+/// renewal or a new shortfall shows up again.
 class _Dismissed extends Notifier<Set<String>> {
+  static const _storage = FlutterSecureStorage();
   @override
-  Set<String> build() => {};
-  void add(String id) => state = {...state, id};
-}
+  Set<String> build() {
+    _storage.read(key: 'dismissed_alerts').then((v) {
+      if (v != null) state = {...state, ...(jsonDecode(v) as List).cast<String>()};
+    }).catchError((_) {}); // unreadable storage just means nothing was cleared yet
+    return {};
+  }
 
-final _dismissedShortfalls = NotifierProvider<_Dismissed, Set<String>>(_Dismissed.new);
-
-class ShortfallAlerts extends ConsumerWidget {
-  const ShortfallAlerts({super.key});
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final hidden = ref.watch(_dismissedShortfalls);
-    final list = (ref.watch(shortfallProvider).value ?? []).where((s) => !hidden.contains(s.sourceId));
-    final banks = {for (final a in ref.watch(sourcesProvider).value ?? <PaymentSource>[]) a.id: a.bank};
-    final base = ref.watch(baseCurrencyProvider).value ?? 'GBP';
-    return Column(children: [
-      for (final s in list)
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-          child: Surface(
-            color: Color.alphaBlend((s.days <= 2 ? kCrimson : kAmber).withValues(alpha: 0.10), kSurface),
-            border: (s.days <= 2 ? kCrimson : kAmber).withValues(alpha: 0.3),
-            padding: const EdgeInsets.fromLTRB(16, 14, 6, 14),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Icon(CupertinoIcons.exclamationmark_triangle, color: s.days <= 2 ? kCrimson : kAmber),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Top up ${banks[s.sourceId] ?? 'account'} by ${money(s.shortfall, base)}',
-                      style: const TextStyle(fontWeight: FontWeight.w700, fontFeatures: tabular)),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${money(s.due, base)} in renewals and expiring trials due within ${s.days == 0 ? 'today' : '${s.days} day${s.days == 1 ? '' : 's'}'}, '
-                    'but the balance is ${money(s.balance, base)}.',
-                    style: const TextStyle(color: kMuted, fontSize: 13, height: 1.35, fontFeatures: tabular),
-                  ),
-                ]),
-              ),
-              IconButton(
-                tooltip: 'Dismiss',
-                visualDensity: VisualDensity.compact,
-                icon: const Icon(CupertinoIcons.xmark, size: 18, color: kMuted),
-                onPressed: () => ref.read(_dismissedShortfalls.notifier).add(s.sourceId),
-              ),
-            ]),
-          ),
-        ).animate().fadeIn(duration: 300.ms).slideY(begin: -0.1, curve: springOut),
-    ]);
+  // ponytail: keys accumulate forever; prune past due dates if this list ever grows noticeably.
+  void addAll(Iterable<String> keys) {
+    state = {...state, ...keys};
+    _storage.write(key: 'dismissed_alerts', value: jsonEncode(state.toList()));
   }
 }
 
-/// Account cards double as the source filter: tap to focus, tap again to clear, long-press to edit.
-/// Adding accounts lives only on the Accounts tab.
-class AccountStrip extends ConsumerWidget {
-  const AccountStrip({super.key});
+final _dismissedAlerts = NotifierProvider<_Dismissed, Set<String>>(_Dismissed.new);
+
+typedef Alert = ({String key, String logo, Color color, String title, String sub});
+
+/// What the bell shows: low balances, trials ending within a week, and payments due in 24 hours.
+final alertsProvider = Provider<List<Alert>>((ref) {
+  final base = ref.watch(baseCurrencyProvider).value ?? 'GBP';
+  final hidden = ref.watch(_dismissedAlerts);
+  final banks = {for (final a in ref.watch(sourcesProvider).value ?? <PaymentSource>[]) a.id: a.bank};
+  final now = DateTime.now();
+  final items = (ref.watch(itemsProvider).value ?? []).where((i) => i.status == 'active' && i.dueAt != null && i.dueAt!.isAfter(now));
+  final all = <Alert>[
+    for (final s in ref.watch(shortfallProvider).value ?? <Shortfall>[])
+      (
+        key: 'short:${s.sourceId}:${s.due}',
+        logo: banks[s.sourceId] ?? s.provider,
+        color: kCrimson,
+        title: 'Top up ${banks[s.sourceId] ?? 'account'} by ${money(s.shortfall, base)}',
+        sub: '${money(s.due, base)} due ${s.days == 0 ? 'today' : 'within ${s.days} day${s.days == 1 ? '' : 's'}'}, balance ${money(s.balance, base)}',
+      ),
+    // Same window as the push reminders.
+    for (final i in items.where((i) => i.isTrial && i.trialEnd!.difference(now).inDays < 7))
+      (
+        key: 'trial:${i.id}:${i.trialEnd!.toIso8601String()}',
+        logo: i.merchant,
+        color: kAmber,
+        title: '${i.merchant} trial ends ${dueLabel(i.trialEnd!).toLowerCase()}',
+        sub: i.postTrialAmount == null ? 'Charge after the trial is unknown' : 'Then ${priceTag(i.postTrialAmount!, i.currency, i.cycle)}',
+      ),
+    for (final i in items.where((i) => !i.isTrial && i.type != 'income' && i.dueAt!.difference(now).inHours < 24))
+      (
+        key: 'due:${i.id}:${i.dueAt!.toIso8601String()}',
+        logo: i.merchant,
+        color: kAccent,
+        title: '${i.merchant} takes ${money(i.chargeAmount, i.currency)} ${dueLabel(i.dueAt!).toLowerCase()}',
+        sub: banks[i.sourceId] ?? 'Payment due',
+      ),
+  ];
+  return all.where((a) => !hidden.contains(a.key)).toList();
+});
+
+/// The bell's sheet: only things that need attention, one line each. Swipe or tap × to clear.
+class AlertsSheet extends ConsumerWidget {
+  const AlertsSheet({super.key, required this.scroll});
+  final ScrollController scroll;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sources = ref.watch(sourcesProvider).value ?? [];
-    final base = ref.watch(baseCurrencyProvider).value ?? 'GBP';
-    final selected = ref.watch(sourceFilterProvider);
-    if (sources.isEmpty) return const SizedBox.shrink();
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      SectionHeader('Accounts', trailing: selected == null ? null : _ClearFilter(onTap: () => ref.read(sourceFilterProvider.notifier).set(null))),
-      SizedBox(
-        height: 112,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          itemCount: sources.length,
-          separatorBuilder: (_, _) => const SizedBox(width: 10),
-          itemBuilder: (_, i) {
-            final s = sources[i];
-            final c = s.color;
-            final on = selected == s.id;
-            return Pressable(
-                onTap: () => ref.read(sourceFilterProvider.notifier).set(on ? null : s.id),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 250),
-                  width: 168,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: on ? c : kLine, width: on ? 1.5 : 1),
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color.alphaBlend(c.withValues(alpha: 0.22), kSurface), kSurface],
-                    ),
-                  ),
+    final alerts = ref.watch(alertsProvider);
+    void clear(Iterable<String> keys) => ref.read(_dismissedAlerts.notifier).addAll(keys);
+    return ListView(
+      controller: scroll,
+      padding: const EdgeInsets.only(bottom: 16),
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 8, 8),
+          child: Row(children: [
+            Expanded(child: Text('Notifications', style: display(20))),
+            if (alerts.isNotEmpty) TextButton(onPressed: () => clear(alerts.map((a) => a.key)), child: const Text('Clear all')),
+          ]),
+        ),
+        if (alerts.isEmpty)
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 8, 20, 24),
+            child: Text('You\'re all caught up.', style: TextStyle(color: kMuted)),
+          ),
+        for (final a in alerts)
+          Dismissible(
+            key: ValueKey(a.key),
+            onDismissed: (_) => clear([a.key]),
+            background: Container(
+              color: kCrimson.withValues(alpha: 0.15),
+              alignment: Alignment.centerRight,
+              padding: const EdgeInsets.only(right: 24),
+              child: const Icon(CupertinoIcons.trash, color: kCrimson, size: 20),
+            ),
+            direction: DismissDirection.endToStart,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 8, 10),
+              child: Row(children: [
+                MerchantAvatar(a.logo, size: 40, dot: a.color),
+                const SizedBox(width: 14),
+                Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Row(children: [
-                      Container(width: 8, height: 8, decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
-                      const SizedBox(width: 6),
-                      Flexible(child: Text(s.bank, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
-                      const SizedBox(width: 6),
-                      Text(s.currency, style: caption),
-                    ]),
-                    const Spacer(),
-                    FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text(money(s.balance, s.currency), style: display(20))),
-                    Text(
-                      s.currency != base && s.baseBalance != null ? '≈ ${money(s.baseBalance!, base)}' : s.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: caption,
-                    ),
+                    Text(a.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontFeatures: tabular)),
+                    Text(a.sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: caption),
                   ]),
                 ),
-            );
-          },
-        ),
-      ),
-    ]);
+                IconButton(
+                  tooltip: 'Delete',
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(CupertinoIcons.xmark, size: 16, color: kMuted),
+                  onPressed: () => clear([a.key]),
+                ),
+              ]),
+            ),
+          ),
+      ],
+    );
   }
-}
-
-class _ClearFilter extends StatelessWidget {
-  const _ClearFilter({required this.onTap});
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) => Pressable(
-        onTap: onTap,
-        child: const Row(children: [
-          Text('Show all', style: TextStyle(color: kAccent, fontSize: 13, fontWeight: FontWeight.w600)),
-          Icon(CupertinoIcons.xmark, size: 16, color: kAccent),
-        ]),
-      );
 }
 
 /// 14-day strip: each day shows its charges as provider-coloured dots and the day total.
