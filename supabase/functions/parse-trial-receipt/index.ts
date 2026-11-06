@@ -71,6 +71,14 @@ Deno.serve(async (req) => {
   const x = (await res.json()).content.find((c: any) => c.type === "tool_use")?.input;
   if (!x?.is_relevant) return json({ ignored: "not a billing receipt" });
 
+  // A second receipt for something already tracked (monthly invoice, re-forwarded email) isn't a new item.
+  // ponytail: exact merchant name match; "Canva" vs "Canva Pro" still slips through, normalise names if that bites.
+  const { data: dup } = await admin.from("financial_items").select("id, merchant_name")
+    .eq("user_id", uid).eq("item_type", x.item_type).neq("status", "cancelled")
+    .ilike("merchant_name", x.merchant_name.replace(/[%_\\]/g, "\\$&"))
+    .limit(1).maybeSingle();
+  if (dup) return json({ duplicate: dup });
+
   const { data: source } = x.payment_source
     ? await admin.from("payment_sources").select("id").eq("user_id", uid).eq("provider", x.payment_source).limit(1).maybeSingle()
     : { data: null };

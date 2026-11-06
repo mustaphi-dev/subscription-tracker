@@ -100,9 +100,9 @@ class _CountryScreenState extends ConsumerState<CountryScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (_editing)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: IconButton(icon: const Icon(CupertinoIcons.chevron_back), onPressed: () => Navigator.of(context).pop()),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: Align(alignment: Alignment.centerLeft, child: GlassBackButton()),
                 ),
               Padding(
                 padding: EdgeInsets.fromLTRB(24, _editing ? 4 : 40, 24, 0),

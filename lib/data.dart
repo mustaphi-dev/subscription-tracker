@@ -191,6 +191,13 @@ Future<void> setCountry(String code, {String? currency}) async {
   needsCountry.value = false;
 }
 
+/// The user's personal forwarding address, e.g. adams-k7f2x@trywince.app.
+final inboundAddressProvider = FutureProvider<String?>((ref) async {
+  ref.watch(authProvider);
+  final r = await db.from('profiles').select('inbound_parse_email').maybeSingle();
+  return r?['inbound_parse_email'] as String?;
+});
+
 final sourcesProvider = StreamProvider<List<PaymentSource>>((ref) {
   ref.watch(authProvider);
   return db.from('payment_sources').stream(primaryKey: ['id']).map((r) => r.map(PaymentSource.new).toList());

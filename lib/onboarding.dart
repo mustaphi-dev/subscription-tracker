@@ -111,7 +111,7 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
         final lift = _span(t, _traced, 0.9, Curves.easeInOutCubic);
         final shift = Offset(0, -26 * lift);
 
-        const word = 'Subtracker';
+        const word = 'Wince';
         final w0 = _traced + 0.02;
         final wordIn = _span(t, w0, w0 + 0.34);
 

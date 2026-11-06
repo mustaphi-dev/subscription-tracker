@@ -217,6 +217,20 @@ class _PressableState extends State<Pressable> {
       );
 }
 
+/// Back control in the same Liquid Glass as the nav. Sits 16px from the edge on every screen.
+class GlassBackButton extends StatelessWidget {
+  const GlassBackButton({super.key});
+  @override
+  Widget build(BuildContext context) => Semantics(
+        button: true,
+        label: 'Back',
+        child: Pressable(
+          onTap: () => Navigator.of(context).maybePop(),
+          child: const Glass(oval: true, child: SizedBox.square(dimension: 40, child: Icon(CupertinoIcons.chevron_left, size: 20))),
+        ),
+      );
+}
+
 /// Real refractive Liquid Glass (Impeller). Falls back to the package's FakeGlass where
 /// shader filters aren't available (Skia / some emulators).
 class Glass extends StatelessWidget {

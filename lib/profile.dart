@@ -20,13 +20,11 @@ class ProfileScreen extends ConsumerStatefulWidget {
 
 class _ProfileState extends ConsumerState<ProfileScreen> {
   bool? _bio;
-  String? _inbound;
 
   @override
   void initState() {
     super.initState();
     PinStore.biometricEnabled().then((v) => mounted ? setState(() => _bio = v) : null);
-    db.from('profiles').select('inbound_parse_email').single().then((r) => mounted ? setState(() => _inbound = r['inbound_parse_email']) : null);
   }
 
   @override
@@ -88,9 +86,10 @@ class _ProfileState extends ConsumerState<ProfileScreen> {
               child: SafeArea(
                 bottom: false,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 0, 24, 0),
+                  padding: const EdgeInsets.fromLTRB(16, 4, 24, 0),
                   child: Row(children: [
-                    IconButton(tooltip: 'Back', icon: const Icon(CupertinoIcons.chevron_left, size: 20), onPressed: () => context.pop()),
+                    const GlassBackButton(),
+                    const SizedBox(width: 12),
                     Text('Profile', style: display(20)),
                   ]),
                 ),
@@ -163,8 +162,8 @@ class _ProfileState extends ConsumerState<ProfileScreen> {
                 row(CupertinoIcons.lock, 'Change PIN', sub: 'The 6-digit code that unlocks the app', onTap: _changePin),
               ]),
             ),
-            const SliverToBoxAdapter(child: SectionHeader('Trial emails')),
-            SliverToBoxAdapter(child: _ForwardingCard(_inbound)),
+            const SliverToBoxAdapter(child: SectionHeader('Email forwarding')),
+            SliverToBoxAdapter(child: _ForwardingCard(ref.watch(inboundAddressProvider).value)),
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 32, 16, 48),
@@ -205,7 +204,7 @@ class _ProfileState extends ConsumerState<ProfileScreen> {
       ));
 }
 
-/// The forwarding address is long and meant to be copied, so it gets its own block instead of a truncated row.
+/// Shows the forwarding address; tapping opens the how-to, which has the copy button.
 class _ForwardingCard extends StatelessWidget {
   const _ForwardingCard(this.address);
   final String? address;
@@ -213,28 +212,16 @@ class _ForwardingCard extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Surface(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Forward sign-up emails here', style: TextStyle(fontWeight: FontWeight.w500)),
-            const SizedBox(height: 2),
-            const Text('We\'ll add the trial or subscription for you.', style: caption),
-            const SizedBox(height: 12),
-            Pressable(
-              onTap: address == null
-                  ? () {}
-                  : () {
-                      Clipboard.setData(ClipboardData(text: address!));
-                      showToast(context, 'Forwarding address copied');
-                    },
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
-                decoration: BoxDecoration(color: kSurfaceHi, borderRadius: BorderRadius.circular(14)),
-                child: Row(children: [
-                  Expanded(child: Text(address ?? '…', maxLines: 2, style: const TextStyle(fontSize: 13, color: kText, fontFeatures: tabular))),
-                  const SizedBox(width: 10),
-                  const Icon(CupertinoIcons.doc_on_doc, size: 18, color: kMuted),
-                ]),
-              ),
+          onTap: () => context.push('/forwarding'),
+          child: Row(children: [
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Forward sign-up emails', style: TextStyle(fontWeight: FontWeight.w500)),
+                const SizedBox(height: 2),
+                Text(address ?? '…', maxLines: 1, overflow: TextOverflow.ellipsis, style: caption),
+              ]),
             ),
+            const Icon(CupertinoIcons.chevron_right, color: kFaint, size: 18),
           ]),
         ),
       );

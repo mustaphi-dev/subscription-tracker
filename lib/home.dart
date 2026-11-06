@@ -481,9 +481,10 @@ class _UpcomingScreenState extends ConsumerState<UpcomingScreen> {
               child: SafeArea(
                 bottom: false,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 0, 24, 12),
+                  padding: const EdgeInsets.fromLTRB(16, 4, 24, 12),
                   child: Row(children: [
-                    IconButton(tooltip: 'Back', icon: const Icon(CupertinoIcons.chevron_left, size: 20), onPressed: () => context.pop()),
+                    const GlassBackButton(),
+                    const SizedBox(width: 12),
                     Text('Upcoming', style: display(20)),
                   ]),
                 ),
@@ -894,10 +895,14 @@ Future<void> scanReceipt(BuildContext context) async {
   try {
     final res = await parseReceipt({'image_base64': base64Encode(await img.readAsBytes()), 'media_type': img.mimeType ?? 'image/jpeg'});
     if (!context.mounted) return;
-    final item = res['item'];
-    item != null
-        ? showToast(context, 'Added ${item['merchant_name']}')
-        : showToast(context, 'No trial or subscription found in that image', icon: CupertinoIcons.info_circle, tone: kAmber);
+    final item = res['item'], dup = res['duplicate'];
+    if (item != null) {
+      showToast(context, 'Added ${item['merchant_name']}');
+    } else if (dup != null) {
+      showToast(context, 'You\'re already tracking ${dup['merchant_name']}', icon: CupertinoIcons.info_circle, tone: kAmber);
+    } else {
+      showToast(context, 'No trial or subscription found in that image', icon: CupertinoIcons.info_circle, tone: kAmber);
+    }
   } catch (e) {
     if (context.mounted) showError(context, 'Couldn\'t read that receipt. Try a clearer photo.', e);
   }
@@ -938,12 +943,16 @@ class _AddSheet extends StatelessWidget {
           scanReceipt(nav.context);
         }),
         const SizedBox(height: 10),
-        option(CupertinoIcons.pencil, const Color(0xFF3D7BFF), 'Add manually', 'Subscription, trial, Pay in 3 or income', () {
+        option(CupertinoIcons.pencil, const Color(0xFF3D7BFF), 'Add manually', 'Subscription, trial, pay later or income', () {
           final nav = Navigator.of(context)..pop();
           showSheet(nav.context, const ManualItemForm());
         }),
         const SizedBox(height: 10),
-        const InboundEmailTile(),
+        option(CupertinoIcons.at, kMint, 'Forward emails', 'Trials, subscriptions and pay later', () {
+          final router = GoRouter.of(context);
+          Navigator.of(context).pop();
+          router.push('/forwarding');
+        }),
       ]),
     );
   }
