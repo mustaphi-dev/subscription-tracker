@@ -139,7 +139,7 @@ class _CalendarState extends ConsumerState<TrialsCalendarTab> {
                           )
                         : ItemGroup(onDay.map((c) => c.item).toList(), flat: true),
                     if (trials.isNotEmpty) ...[
-                      SectionHeader('Active trials', trailing: Text('${trials.length}', style: label)),
+                      const SectionHeader('Active trials'),
                       ItemGroup(trials, flat: true),
                     ],
                   ],
@@ -440,7 +440,7 @@ class AccountsTab extends ConsumerWidget {
         try {
           await syncBanks();
         } catch (e) {
-          if (context.mounted) showError(context, 'Sync failed: ${functionError(e)}');
+          if (context.mounted) showError(context, 'Couldn\'t refresh your banks. Try again in a moment.', e);
         }
       },
       slivers: [
@@ -450,10 +450,9 @@ class AccountsTab extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Accounts', style: display(34)),
-                const SizedBox(height: 14),
-                Text('Across ${sources.length} account${sources.length == 1 ? '' : 's'}', style: label),
-                BigMoney(total, base, size: 40),
+                const Text('Total balance', style: TextStyle(color: kMuted, fontSize: 14, fontWeight: FontWeight.w500)),
+                const SizedBox(height: 6),
+                BigMoney(total, base, size: 52),
               ],
             ),
           ),
@@ -522,7 +521,7 @@ class AccountsTab extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Open Banking keeps balances and renewals in sync without typing them in.',
+                    'Tap a bank to link it in seconds.',
                     style: TextStyle(color: kMuted, fontSize: 13, height: 1.4),
                   ),
                   const SizedBox(height: 14),
@@ -568,9 +567,7 @@ class _BankRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final first = accounts.first;
-    final synced = accounts.map((a) => a.lastSynced).nonNulls.fold<DateTime?>(null, (m, d) => m == null || d.isAfter(m) ? d : m);
     final total = accounts.fold(0.0, (t, a) => t + (a.baseBalance ?? 0));
-    final count = accounts.length == 1 ? first.name : '${accounts.length} accounts';
     return Pressable(
       scale: 0.99,
       onTap: () => showSheet(context, _BankSheet(accounts, base)),
@@ -586,7 +583,7 @@ class _BankRow extends StatelessWidget {
               children: [
                 Text(first.bank, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
                 Text(
-                  '$count · ${first.isManual ? 'updated' : 'synced'} ${synced == null ? 'never' : DateFormat('d MMM, HH:mm').format(synced)}',
+                  accounts.map((a) => a.name).join(' · '),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: caption,
@@ -654,7 +651,7 @@ class _BankSheet extends StatelessWidget {
           showToast(context, manual ? '$bank removed' : '$bank unlinked');
         }
       } catch (e) {
-        if (context.mounted) showError(context, 'Couldn\'t ${manual ? 'remove' : 'unlink'} $bank: ${functionError(e)}');
+        if (context.mounted) showError(context, 'Couldn\'t remove $bank. Try again.', e);
       }
     }
 
@@ -670,7 +667,7 @@ class _BankSheet extends StatelessWidget {
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(bank, style: display(20)),
-                Text(manual ? 'Added by hand' : 'Open Banking · read-only', style: caption),
+                Text(manual ? 'Added manually' : 'Linked', style: caption),
               ]),
             ),
             Text(money(accounts.fold(0.0, (t, a) => t + (a.baseBalance ?? 0)), base), style: display(18)),
@@ -686,13 +683,7 @@ class _BankSheet extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   child: Row(children: [
                     Expanded(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
-                        Text(
-                          '${a.isManual ? 'Updated' : 'Synced'} ${a.lastSynced == null ? 'never' : DateFormat('d MMM, HH:mm').format(a.lastSynced!)}',
-                          style: caption,
-                        ),
-                      ]),
+                      child: Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
                     ),
                     Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                       Text(money(a.balance, a.currency), style: const TextStyle(fontWeight: FontWeight.w600, fontFeatures: tabular)),
@@ -720,7 +711,7 @@ Future<void> _connect(BuildContext context, String bank) async {
   try {
     await launchUrl(Uri.parse(await connectBank(bank)), mode: LaunchMode.externalApplication);
   } catch (e) {
-    if (context.mounted) showError(context, 'Couldn\'t connect $bank: ${functionError(e)}');
+    if (context.mounted) showError(context, 'Couldn\'t connect $bank. Try again.', e);
   }
 }
 
@@ -743,7 +734,7 @@ Future<void> _connectByName(BuildContext context, WidgetRef ref, String name) as
   final bank = all.where((b) => b.toLowerCase().startsWith(name.toLowerCase())).firstOrNull;
   if (!context.mounted) return;
   if (bank == null) {
-    return showError(context, all.isEmpty ? 'Bank sync isn\'t available yet. No banks came back from the provider.' : '$name can\'t be connected yet.');
+    return showError(context, all.isEmpty ? 'Bank linking isn\'t available right now.' : '$name can\'t be connected yet.');
   }
   await _connect(context, bank);
 }
@@ -807,7 +798,7 @@ class _BankPickerState extends ConsumerState<_BankPicker> {
             Padding(
               padding: const EdgeInsets.all(24),
               child: Text(
-                banks.hasError ? 'Couldn\'t load banks: ${functionError(banks.error!)}' : (_q.isEmpty ? 'No banks available to connect yet.' : 'No banks match "$_q".'),
+                banks.hasError ? 'Couldn\'t load banks right now.' : (_q.isEmpty ? 'No banks available to connect yet.' : 'No banks match "$_q".'),
                 textAlign: TextAlign.center,
                 style: caption,
               ),
@@ -948,7 +939,7 @@ class _ManualItemFormState extends ConsumerState<ManualItemForm> {
         if (_type == 'installment') ...{'installment_total_count': installments, 'installment_remaining_balance': amount * (installments ?? 0)},
       });
     } catch (e) {
-      if (mounted) showError(context, 'Couldn\'t save: $e');
+      if (mounted) showError(context, 'Couldn\'t save that. Try again.', e);
       return;
     }
     if (!mounted) return;
@@ -1146,7 +1137,8 @@ class _SignInState extends State<SignInScreen> {
     } on AuthException catch (e) {
       setState(() => _error = e.message);
     } catch (e) {
-      setState(() => _error = '$e');
+      debugPrint('$e');
+      setState(() => _error = 'Something went wrong. Check your connection and try again.');
     } finally {
       if (mounted) setState(() => _busy = false);
     }

@@ -36,11 +36,9 @@ class AnalyticsTab extends ConsumerWidget {
           child: Padding(
             padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Insights', style: display(34)),
-              const SizedBox(height: 16),
-              const Text('Recurring outgoings per month', style: label),
-              const SizedBox(height: 4),
-              BigMoney(monthlyOut, base, size: 40),
+              const Text('Monthly outgoings', style: TextStyle(color: kMuted, fontSize: 14, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 6),
+              BigMoney(monthlyOut, base, size: 52),
               if (monthlyIn > 0) ...[
                 const SizedBox(height: 6),
                 Text(
@@ -115,7 +113,7 @@ class _ProjectedSpend extends StatelessWidget {
 
     return _Card(
       title: 'Projected spend',
-      subtitle: 'Next 6 months, including trials that convert',
+      subtitle: 'Next 6 months, including trials that start charging',
       child: SizedBox(
         height: 180,
         child: BarChart(

@@ -222,7 +222,7 @@ class _ItemRowState extends ConsumerState<ItemRow> {
                 final confirm = i.status == 'pending_confirmation';
                 if (!confirm && !await confirmCancel(context, i)) return;
                 await setItemStatus(i.id, confirm ? 'active' : 'cancelled');
-                if (mounted) showToast(context, confirm ? 'Trial confirmed — we\'ll remind you before it converts' : 'Trial cancelled, alerts silenced');
+                if (mounted) showToast(context, confirm ? 'Got it. We\'ll remind you before it starts charging.' : 'Trial cancelled. No more reminders.');
               },
               child: Text(i.status == 'pending_confirmation' ? 'Confirm trial' : 'Mark cancelled'),
             ),
@@ -240,7 +240,7 @@ class _ItemRowState extends ConsumerState<ItemRow> {
         _kv('Frequency', _cycleLabel[i.cycle] ?? i.cycle),
         if (i.type != 'income') _kv('Total spent so far', money(i.totalSpent, i.currency)),
         _kv(i.type == 'income' ? 'Paid into' : 'Paid from', s == null ? 'Not assigned' : '${s.bank} · ${s.name}'),
-        _kv('Added via', switch (i.detectedVia) { 'open_banking' => 'Open Banking', 'email_ai' => 'Receipt scan', _ => 'Manual' }),
+        _kv('Source', switch (i.detectedVia) { 'open_banking' => 'Your bank', 'email_ai' => 'Receipt scan', _ => 'Added by you' }),
       ]);
 
   Future<void> _openCancel(FinancialItem i, PaymentSource? s) async {

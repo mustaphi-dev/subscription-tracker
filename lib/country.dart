@@ -76,7 +76,7 @@ class _CountryScreenState extends ConsumerState<CountryScreen> {
       await setCountry(c.code, currency: switchCurrency ? c.currency : null);
       if (mounted && _editing) Navigator.of(context).pop();
     } catch (e) {
-      if (mounted) showError(context, 'Couldn\'t save your country: $e');
+      if (mounted) showError(context, 'Couldn\'t save your country. Try again.', e);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
