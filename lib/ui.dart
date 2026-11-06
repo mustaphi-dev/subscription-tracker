@@ -34,6 +34,15 @@ const providerColors = {
 };
 const providerLabels = {'revolut': 'Revolut', 'wise': 'Wise', 'lloyds': 'Lloyds', 'paypal': 'PayPal'};
 
+/// A bank's brand colour if the app knows it, otherwise a stable colour from its name.
+Color providerColorFor(String bank) {
+  final key = bank.toLowerCase();
+  for (final e in providerColors.entries) {
+    if (key.contains(e.key)) return e.value;
+  }
+  return HSLColor.fromAHSL(1, (key.hashCode % 360).abs().toDouble(), 0.55, 0.6).toColor();
+}
+
 extension SourceLook on PaymentSource {
   /// Bank name to show: the provider's, or whatever the user typed for other banks.
   String get bank => providerLabels[provider] ?? institution ?? 'Bank';

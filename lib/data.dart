@@ -269,8 +269,17 @@ Future<void> saveAccount({String? id, required String bank, required String name
 
 Future<void> deleteAccount(String id) => db.from('payment_sources').delete().eq('id', id);
 
-Future<String> connectBank(String provider) async {
-  final res = await db.functions.invoke('bank-sync/connect', body: {'provider': provider});
+/// Banks the user can link in their country (empty where bank sync isn't offered).
+final banksProvider = FutureProvider<List<String>>((ref) async {
+  final country = await ref.watch(countryProvider.future);
+  if (country == null) return [];
+  final res = await db.functions.invoke('bank-sync/banks');
+  return [for (final b in res.data['banks'] as List) b['name'] as String];
+});
+
+/// Starts a consent with [bank] (a name from [banksProvider]); returns the bank's URL to open.
+Future<String> connectBank(String bank) async {
+  final res = await db.functions.invoke('bank-sync/connect', body: {'bank': bank});
   return res.data['link'] as String;
 }
 

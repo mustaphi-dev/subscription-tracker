@@ -549,29 +549,7 @@ class AccountsTab extends ConsumerWidget {
                       style: TextStyle(color: kMuted, fontSize: 13, height: 1.4),
                     ),
                     const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        for (final p in providerLabels.keys)
-                          Expanded(
-                            child: Pressable(
-                              onTap: () async {
-                                try {
-                                  await launchUrl(Uri.parse(await connectBank(p)), mode: LaunchMode.externalApplication);
-                                } catch (e) {
-                                  if (context.mounted) showError(context, 'Couldn\'t connect ${providerLabels[p]}: ${functionError(e)}');
-                                }
-                              },
-                              child: Column(
-                                children: [
-                                  _BankMark(providerLabels[p]!, providerColors[p]!, size: 44),
-                                  const SizedBox(height: 6),
-                                  Text(providerLabels[p]!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-                                ],
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
+                    const _PopularBanks(),
                   ],
                 ),
               ),
@@ -644,6 +622,115 @@ class _AccountRow extends StatelessWidget {
       ),
     ),
   );
+}
+
+Future<void> _connect(BuildContext context, String bank) async {
+  try {
+    await launchUrl(Uri.parse(await connectBank(bank)), mode: LaunchMode.externalApplication);
+  } catch (e) {
+    if (context.mounted) showError(context, 'Couldn\'t connect $bank: ${functionError(e)}');
+  }
+}
+
+/// A few well-known banks as one-tap shortcuts, then "All banks" for the full list.
+class _PopularBanks extends ConsumerWidget {
+  const _PopularBanks();
+  static const _popular = ['Lloyds', 'Monzo', 'Revolut', 'Barclays', 'HSBC', 'Starling', 'Nationwide', 'NatWest'];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final banks = ref.watch(banksProvider);
+    final list = banks.value ?? [];
+    // Match by prefix since providers name banks like "Lloyds Bank" or "Monzo Bank".
+    final picks = [
+      for (final p in _popular) ?list.where((b) => b.toLowerCase().startsWith(p.toLowerCase())).firstOrNull,
+    ].take(3).toList();
+
+    Widget tile(String label, Widget mark, VoidCallback onTap) => Expanded(
+      child: Pressable(
+        onTap: onTap,
+        child: Column(children: [
+          mark,
+          const SizedBox(height: 6),
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+        ]),
+      ),
+    );
+
+    if (banks.hasError) {
+      return Text('Couldn\'t load banks: ${functionError(banks.error!)}', style: caption.copyWith(color: kCrimson));
+    }
+    return Row(children: [
+      for (final b in picks) tile(b.split(' ').first, _BankMark(b, providerColorFor(b), size: 44), () => _connect(context, b)),
+      tile(
+        'All banks',
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(color: kSurfaceHi, borderRadius: BorderRadius.circular(44 * 0.3)),
+          child: banks.isLoading
+              ? const Padding(padding: EdgeInsets.all(13), child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(CupertinoIcons.search, size: 20, color: kText),
+        ),
+        () => list.isEmpty ? null : showSheet(context, _BankPicker(list, onPick: (b) => _connect(context, b))),
+      ),
+    ]);
+  }
+}
+
+/// Searchable list of every bank the provider supports in the user's country.
+class _BankPicker extends StatefulWidget {
+  const _BankPicker(this.banks, {required this.onPick});
+  final List<String> banks;
+  final ValueChanged<String> onPick;
+  @override
+  State<_BankPicker> createState() => _BankPickerState();
+}
+
+class _BankPickerState extends State<_BankPicker> {
+  String _q = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = widget.banks.where((b) => b.toLowerCase().contains(_q.toLowerCase())).toList();
+    return SizedBox(
+      height: MediaQuery.of(context).size.height * 0.75,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Padding(padding: const EdgeInsets.fromLTRB(20, 4, 20, 12), child: Text('Choose your bank', style: display(20))),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: TextField(
+            autofocus: true,
+            onChanged: (v) => setState(() => _q = v.trim()),
+            decoration: const InputDecoration(hintText: 'Search banks', prefixIcon: Icon(CupertinoIcons.search, size: 18)),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+            itemCount: shown.length,
+            itemBuilder: (_, i) => Pressable(
+              scale: 0.99,
+              onTap: () {
+                Navigator.of(context).pop();
+                widget.onPick(shown[i]);
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                child: Row(children: [
+                  _BankMark(shown[i], providerColorFor(shown[i]), size: 36),
+                  const SizedBox(width: 14),
+                  Expanded(child: Text(shown[i], style: const TextStyle(fontWeight: FontWeight.w500))),
+                  const Icon(CupertinoIcons.chevron_right, color: kFaint, size: 18),
+                ]),
+              ),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
 }
 
 class _BankMark extends StatelessWidget {

@@ -1,13 +1,14 @@
-// GoCardless Bank Account Data. Closed to new sign-ups; kept for existing credentials.
+// GoCardless Bank Account Data. Closed to new sign-ups, so it takes no new links;
+// it stays so connections made with it keep syncing until they expire.
 import { env } from "../../_shared/mod.ts";
 import type { Aggregator, LinkStatus, Txn } from "./types.ts";
 
 const GC = "https://bankaccountdata.gocardless.com/api/v2";
 const INSTITUTIONS: Record<string, string> = {
-  lloyds: "LLOYDS_LOYDGB2L",
-  revolut: "REVOLUT_REVOGB21",
-  wise: "WISE_TRWIGB22",
-  paypal: "PAYPAL_PPLXLULL",
+  Lloyds: "LLOYDS_LOYDGB2L",
+  Revolut: "REVOLUT_REVOGB21",
+  Wise: "WISE_TRWIGB22",
+  PayPal: "PAYPAL_PPLXLULL",
 };
 
 let token: { value: string; exp: number } | null = null;
@@ -41,15 +42,20 @@ const txn = (t: any, pending: boolean): Txn => ({
 
 export const gocardless: Aggregator = {
   id: "gocardless",
-  countries: ["GB"],
-  institutions: Object.keys(INSTITUTIONS),
+  countries: [],
 
-  async createLink({ institution, reference, redirect }) {
+  listBanks: async () => Object.keys(INSTITUTIONS).map((name) => ({ name })),
+
+  async createLink({ bank, reference, redirect }) {
     const r = await gc("/requisitions/", {
       method: "POST",
-      body: JSON.stringify({ institution_id: INSTITUTIONS[institution], reference, redirect, user_language: "EN" }),
+      body: JSON.stringify({ institution_id: INSTITUTIONS[bank], reference, redirect, user_language: "EN" }),
     });
     return { externalId: r.id, link: r.link };
+  },
+
+  async completeLink(id) {
+    return { externalId: id, status: (await this.status(id)).status };
   },
 
   async status(id) {

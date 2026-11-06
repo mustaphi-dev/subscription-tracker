@@ -1,16 +1,19 @@
 // Open Banking account linking. The provider for each country lives in ./aggregators.
-// Routes: POST /connect (user), GET /callback (browser redirect), POST /sync (user), POST /sync-all (cron).
+// Routes: POST /banks, POST /connect, POST /sync (user); GET /callback (browser redirect); POST /sync-all (cron).
 import { admin, env, isServiceCall, json, money, sendPush, userFrom } from "../_shared/mod.ts";
+import { enableBanking } from "./aggregators/enablebanking.ts";
 import { gocardless } from "./aggregators/gocardless.ts";
 import type { Aggregator, Txn } from "./aggregators/types.ts";
 
-const AGGREGATORS: Aggregator[] = [gocardless];
+// New links use the first provider covering the user's country; older links keep their own.
+const AGGREGATORS: Aggregator[] = [enableBanking, gocardless];
 const byId = (id: string) => AGGREGATORS.find((a) => a.id === id);
 const forCountry = (c: string | null) => AGGREGATORS.find((a) => c != null && a.countries.includes(c));
 
 Deno.serve(async (req) => {
   const route = new URL(req.url).pathname.split("/").pop();
   try {
+    if (route === "banks") return await banks(req);
     if (route === "connect") return await connect(req);
     if (route === "callback") return await callback(req);
     if (route === "sync") {
@@ -32,22 +35,38 @@ Deno.serve(async (req) => {
   }
 });
 
+/** The signed-in user's country and the provider that serves it, if any. */
+async function userAggregator(uid: string) {
+  const { data: profile } = await admin.from("profiles").select("country").eq("id", uid).single();
+  const country: string | null = profile?.country ?? null;
+  return { country, agg: forCountry(country) };
+}
+
+const UNAVAILABLE = "Automatic bank sync isn't available in your country yet. You can add accounts manually.";
+
+async function banks(req: Request) {
+  const uid = await userFrom(req);
+  if (!uid) return json({ error: "unauthorised" }, 401);
+  const { country, agg } = await userAggregator(uid);
+  if (!agg) return json({ error: UNAVAILABLE }, 400);
+  return json({ banks: await agg.listBanks(country!) });
+}
+
 async function connect(req: Request) {
   const uid = await userFrom(req);
   if (!uid) return json({ error: "unauthorised" }, 401);
-  const { provider } = await req.json();
-
-  const { data: profile } = await admin.from("profiles").select("country").eq("id", uid).single();
-  const agg = forCountry(profile?.country ?? null);
-  if (!agg) return json({ error: "Automatic bank sync isn't available in your country yet. You can add accounts manually." }, 400);
-  if (!agg.institutions.includes(provider)) return json({ error: "unknown provider" }, 400);
+  const { bank } = await req.json();
+  const { country, agg } = await userAggregator(uid);
+  if (!agg) return json({ error: UNAVAILABLE }, 400);
+  if (!(await agg.listBanks(country!)).some((b) => b.name === bank)) return json({ error: "unknown bank" }, 400);
 
   const reference = crypto.randomUUID();
   const { externalId, link } = await agg.createLink({
-    institution: provider, reference,
+    bank, country: country!, reference,
     redirect: `${env("SUPABASE_URL")}/functions/v1/bank-sync/callback`,
   });
-  await admin.from("bank_connections").insert({ user_id: uid, provider, reference, aggregator: agg.id, external_id: externalId });
+  // `provider` holds the bank's display name for links made from here on.
+  await admin.from("bank_connections").insert({ user_id: uid, provider: bank, reference, aggregator: agg.id, external_id: externalId });
   return json({ link });
 }
 
@@ -58,12 +77,12 @@ async function callback(req: Request) {
   if (!conn) return new Response("Unknown or used link", { status: 400 });
 
   // The redirect fires whether or not the user approved, so ask the provider what actually happened.
-  const { status } = await byId(conn.aggregator)!.status(conn.external_id);
+  const { externalId, status } = await byId(conn.aggregator)!.completeLink(conn.external_id, q);
   if (status !== "linked") {
     if (status !== "pending") await admin.from("bank_connections").update({ status }).eq("id", conn.id);
     return Response.redirect("subtracker://bank-connected?status=failed", 302);
   }
-  await admin.from("bank_connections").update({ status: "linked" }).eq("id", conn.id);
+  await admin.from("bank_connections").update({ status: "linked", external_id: externalId }).eq("id", conn.id);
   await syncUser(conn.user_id).catch(console.error);
   return Response.redirect("subtracker://bank-connected", 302);
 }
@@ -87,10 +106,14 @@ async function syncUser(uid: string) {
   return { accounts };
 }
 
-async function syncAccount(uid: string, agg: Aggregator, provider: string, accId: string) {
+// Banks the app has its own colour and label for; everything else is "other" plus its name.
+const KNOWN = ["revolut", "wise", "lloyds", "paypal"];
+const providerKey = (bank: string) => KNOWN.find((k) => bank.toLowerCase().includes(k)) ?? "other";
+
+async function syncAccount(uid: string, agg: Aggregator, bank: string, accId: string) {
   const { account, transactions } = await agg.fetchAccount(accId);
   const { data: source } = await admin.from("payment_sources").upsert({
-    user_id: uid, provider, external_account_id: accId,
+    user_id: uid, provider: providerKey(bank), institution: bank, external_account_id: accId,
     account_name: account.name,
     current_balance: account.balance,
     currency: account.currency,
