@@ -19,6 +19,29 @@
         "--dart-define-from-file=env.json",
         "--dart-define=REPLAY_ONBOARDING=true"
       ]
+    },
+    {
+      "name": "wince (release, iPhone)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "flutterMode": "release",
+      "deviceId": "00008150-000E226E0CF1401C",
+      "toolArgs": [
+        "--dart-define-from-file=env.json"
+      ]
+    },
+    {
+      "name": "wince (release, iPhone, replay onboarding)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "flutterMode": "release",
+      "deviceId": "00008150-000E226E0CF1401C",
+      "toolArgs": [
+        "--dart-define-from-file=env.json",
+        "--dart-define=REPLAY_ONBOARDING=true"
+      ]
     }
   ]
 }

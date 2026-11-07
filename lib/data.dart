@@ -139,8 +139,11 @@ class Shortfall {
 
 final authProvider = StreamProvider<AuthState>((ref) => db.auth.onAuthStateChange);
 
+/// The signed-in user's id. Only changes on sign-in/out, so token refreshes (e.g. on resume) don't reload data.
+final uidProvider = Provider<String?>((ref) => ref.watch(authProvider).value?.session?.user.id ?? db.auth.currentUser?.id);
+
 final baseCurrencyProvider = StreamProvider<String>((ref) {
-  ref.watch(authProvider);
+  ref.watch(uidProvider);
   final uid = db.auth.currentUser?.id;
   if (uid == null) return Stream.value('GBP');
   return db.from('profiles').stream(primaryKey: ['id']).eq('id', uid).map(
@@ -156,7 +159,7 @@ String isoCurrency(String? raw) {
 
 /// The user's country code (null until picked after sign-up).
 final countryProvider = StreamProvider<String?>((ref) {
-  ref.watch(authProvider);
+  ref.watch(uidProvider);
   final uid = db.auth.currentUser?.id;
   if (uid == null) return Stream.value(null);
   return db.from('profiles').stream(primaryKey: ['id']).eq('id', uid).map(
@@ -193,18 +196,18 @@ Future<void> setCountry(String code, {String? currency}) async {
 
 /// The user's personal forwarding address, e.g. adams-k7f2x@trywince.app.
 final inboundAddressProvider = FutureProvider<String?>((ref) async {
-  ref.watch(authProvider);
+  ref.watch(uidProvider);
   final r = await db.from('profiles').select('inbound_parse_email').maybeSingle();
   return r?['inbound_parse_email'] as String?;
 });
 
 final sourcesProvider = StreamProvider<List<PaymentSource>>((ref) {
-  ref.watch(authProvider);
+  ref.watch(uidProvider);
   return db.from('payment_sources').stream(primaryKey: ['id']).map((r) => r.map(PaymentSource.new).toList());
 });
 
 final itemsProvider = StreamProvider<List<FinancialItem>>((ref) {
-  ref.watch(authProvider);
+  ref.watch(uidProvider);
   return db.from('financial_items').stream(primaryKey: ['id']).map((rows) {
     final items = rows.map(FinancialItem.new).where((i) => i.status != 'cancelled').toList();
     final far = DateTime(9999);

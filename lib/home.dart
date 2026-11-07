@@ -47,7 +47,6 @@ class ShellScreen extends ConsumerWidget {
     final compact = ref.watch(navCompactProvider);
     return Scaffold(
       body: Ambient(
-        color: kAccent,
         child: Stack(children: [
           IndexedStack(
             index: tab,

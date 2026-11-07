@@ -170,7 +170,7 @@ class _ProjectedSpend extends StatelessWidget {
                     gradient: LinearGradient(
                       begin: Alignment.bottomCenter,
                       end: Alignment.topCenter,
-                      colors: k == 0 ? [kAccent.withValues(alpha: 0.6), kAccent] : [kSurfaceHi, const Color(0xFF2A2E39)],
+                      colors: k == 0 ? [kGlow.withValues(alpha: 0.6), kGlow] : [kSurfaceHi, const Color(0xFF2A2E39)],
                     ),
                   ),
                 ]),
