@@ -50,3 +50,6 @@ node_modules/
 
 # Supabase CLI cache (linked project, versions)
 supabase/.temp/
+
+# Flutter template placeholder; the launch screen is background colour only
+ios/Runner/Assets.xcassets/LaunchImage.imageset/
