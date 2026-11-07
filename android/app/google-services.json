@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "310135653018",
+    "project_id": "trywince-app",
+    "storage_bucket": "trywince-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:310135653018:android:0cf5ab66bdc305e6dd9523",
+        "android_client_info": {
+          "package_name": "app.trywince.wince"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBTto8lQx2LcDLKkk0Hqla5kK2yHTH7TLs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
