@@ -176,7 +176,9 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
                                 ),
                             ],
                           ),
-                          style: display(30, weight: FontWeight.w600).copyWith(letterSpacing: -0.9 + 2.4 * (1 - wordIn)),
+                          // The splash sits above the navigator, outside any Material, so the
+                          // underline of the fallback text style has to be cleared here.
+                          style: display(30, weight: FontWeight.w600).copyWith(letterSpacing: -0.9 + 2.4 * (1 - wordIn), decoration: TextDecoration.none),
                         ),
                       ),
                     ),
