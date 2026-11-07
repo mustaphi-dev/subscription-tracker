@@ -31,6 +31,10 @@ Widget _rise(double r, Widget child, {double dy = 16}) => Opacity(
 
 // ───────── Splash ─────────
 
+/// Set as the splash starts to leave, so the first onboarding scene begins its loop
+/// from the top as it is revealed instead of partway through (the hourglass mid-flip).
+final splashGone = ValueNotifier<bool>(false);
+
 /// Cold-start brand moment layered over the app. The native launch screen is only the
 /// background colour. The middle of the W rises out of the dark, the two cut legs slide
 /// down their slant into place and the mark flinches as they land (the wince), a sheen
@@ -81,6 +85,7 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
   void _leave() {
     if (!mounted || _leaving) return;
     _leaving = true;
+    splashGone.value = true;
     _intro.stop();
     _exit.forward().then((_) {
       if (mounted) setState(() => _gone = true);
@@ -242,9 +247,10 @@ class _OnboardingState extends State<OnboardingScreen> with SingleTickerProvider
     for (final v in _videos) {
       v.addListener(_syncOnReady);
     }
+    splashGone.addListener(_syncPlayback);
   }
 
-  /// Starts the visible page's loop as soon as its player is ready.
+  /// Starts the visible page's loop once its player is ready and the splash has gone.
   void _syncOnReady() {
     if (_videos.every((v) => v.value.isInitialized)) {
       for (final v in _videos) {
@@ -259,7 +265,7 @@ class _OnboardingState extends State<OnboardingScreen> with SingleTickerProvider
     for (var i = 0; i < _videos.length; i++) {
       final v = _videos[i];
       if (!v.value.isInitialized) continue;
-      final want = i == _page && !_still;
+      final want = i == _page && !_still && splashGone.value;
       if (want && !v.value.isPlaying) {
         v.play();
       } else if (!want && v.value.isPlaying) {
@@ -302,6 +308,7 @@ class _OnboardingState extends State<OnboardingScreen> with SingleTickerProvider
 
   @override
   void dispose() {
+    splashGone.removeListener(_syncPlayback);
     _flinch.dispose();
     _pages.dispose();
     for (final v in _videos) {
