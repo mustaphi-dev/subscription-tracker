@@ -1,20 +1,24 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
-import 'package:video_player/video_player.dart';
 
 import 'brand_mark.dart';
+import 'stage.dart';
 import 'ui.dart';
 
 /// Has this device seen onboarding? Loaded before runApp so the router can redirect synchronously.
 final onboarded = ValueNotifier(false);
 const _storage = FlutterSecureStorage();
 
-Future<void> loadOnboarded() async => onboarded.value = await _storage.read(key: 'onboarded') == 'yes';
+/// Run with `--dart-define=REPLAY_ONBOARDING=true` to forget it on every launch, so the
+/// story can be tested again. Uninstalling isn't enough on iOS: the keychain keeps it.
+Future<void> loadOnboarded() async {
+  if (const bool.fromEnvironment('REPLAY_ONBOARDING')) await _storage.delete(key: 'onboarded');
+  onboarded.value = await _storage.read(key: 'onboarded') == 'yes';
+}
 
 Future<void> finishOnboarding() async {
   await _storage.write(key: 'onboarded', value: 'yes');
@@ -32,10 +36,14 @@ Widget _rise(double r, Widget child, {double dy = 16}) => Opacity(
 
 // ───────── Splash ─────────
 
+/// Set as the splash starts to leave, so the first onboarding scene begins its loop
+/// from the top as it is revealed instead of partway through (the hourglass mid-flip).
+final splashGone = ValueNotifier<bool>(false);
+
 /// Cold-start brand moment layered over the app. The native launch screen is only the
-/// background colour. A violet light traces an S out of the dark, the chrome S (the app
-/// icon's mark) materialises around it with the light settling into its groove, a sheen
-/// crosses the metal, the wordmark writes itself in underneath, and everything dissolves
+/// background colour. The middle of the W rises out of the dark, the two cut legs slide
+/// down their slant into place and the mark flinches as they land (the wince), a sheen
+/// crosses the face, the wordmark writes itself in underneath, and everything dissolves
 /// into the app. Tap to skip; reduced motion shows the finished mark and fades.
 class SplashOverlay extends StatefulWidget {
   const SplashOverlay({super.key});
@@ -46,7 +54,7 @@ class SplashOverlay extends StatefulWidget {
 class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateMixin {
   static const _length = Duration(milliseconds: 2500);
 
-  /// Fraction of the intro at which the chrome S has fully appeared.
+  /// Fraction of the intro at which the W is whole (the legs land and it flinches).
   static const _traced = 0.6;
 
   late final _intro = AnimationController(vsync: this, duration: _length);
@@ -59,7 +67,7 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
     if (_started) return;
     _started = true;
     final reduced = MediaQuery.disableAnimationsOf(context);
-    // Start once the chrome S is decoded (or after a beat regardless), so it never pops in late.
+    // Start once the W is decoded (or after a beat regardless), so it never pops in late.
     var begun = false;
     void begin() {
       if (begun || !mounted) return;
@@ -75,13 +83,14 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
       });
     }
 
-    precacheImage(const AssetImage(kMarkAsset), context).whenComplete(begin);
+    Future.wait([for (final a in kMarkLayers) precacheImage(AssetImage(a), context)]).whenComplete(begin);
     Future.delayed(const Duration(milliseconds: 600), begin);
   }
 
   void _leave() {
     if (!mounted || _leaving) return;
     _leaving = true;
+    splashGone.value = true;
     _intro.stop();
     _exit.forward().then((_) {
       if (mounted) setState(() => _gone = true);
@@ -104,10 +113,10 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
         final t = _intro.value, e = Curves.easeInCubic.transform(_exit.value);
         final size = math.min(MediaQuery.sizeOf(context).width * 0.5, 210.0);
 
-        final run = _span(t, 0.03, 0.46, Curves.easeInOutCubic);            // light traces the S
-        final settle = _span(t, 0.3, _traced);                              // ...and stays lit
-        final rise = _span(t, 0.32, _traced);                               // chrome materialises round it
-        final glow = _span(t, 0.4, _traced + 0.25);
+        final middle = _span(t, 0.04, 0.36);                                 // the middle of the W rises
+        final legs = _span(t, 0.26, _traced, Curves.easeInCubic);            // the cut legs slide in and land
+        final flinch = 1 - (2 * (t - _traced) / 0.16).abs().clamp(0.0, 1.0); // a quick squeeze on landing
+        final glow = _span(t, 0.2, _traced + 0.25);
         final lift = _span(t, _traced, 0.9, Curves.easeInOutCubic);
         final shift = Offset(0, -26 * lift);
 
@@ -127,7 +136,7 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    // Violet light pooling behind the S once it is lit.
+                    // Soft light pooling behind the W.
                     Center(
                       child: Transform.translate(
                         offset: shift,
@@ -138,9 +147,9 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
                             shape: BoxShape.circle,
                             gradient: RadialGradient(
                               colors: [
-                                const Color(0xFF7B4DFF).withValues(alpha: 0.28 * glow),
-                                const Color(0xFF4B2BD6).withValues(alpha: 0.08 * glow),
-                                const Color(0xFF4B2BD6).withValues(alpha: 0),
+                                const Color(0xFFFFFFFF).withValues(alpha: 0.10 * glow),
+                                const Color(0xFFB8B8C8).withValues(alpha: 0.03 * glow),
+                                const Color(0xFFB8B8C8).withValues(alpha: 0),
                               ],
                               stops: const [0, 0.4, 1],
                             ),
@@ -152,13 +161,12 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
                       child: Transform.translate(
                         offset: shift,
                         child: Transform.scale(
-                          scale: (0.96 + 0.04 * Curves.easeOutCubic.transform(rise)) * (1 + 0.18 * e),
+                          scale: (0.96 + 0.04 * Curves.easeOutCubic.transform(middle)) * (1 + 0.18 * e),
                           child: BrandMark(
                             size: size,
-                            chrome: rise,
-                            head: run * 1.45,
-                            tail: 0.45,
-                            settle: settle,
+                            middle: middle,
+                            legs: legs,
+                            flinch: flinch,
                             sheen: _span(t, _traced - 0.06, _traced + 0.3, Curves.easeInOut),
                           ),
                         ),
@@ -178,7 +186,9 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
                                 ),
                             ],
                           ),
-                          style: display(30, weight: FontWeight.w600).copyWith(letterSpacing: -0.9 + 2.4 * (1 - wordIn)),
+                          // The splash sits above the navigator, outside any Material, so the
+                          // underline of the fallback text style has to be cleared here.
+                          style: display(30, weight: FontWeight.w600).copyWith(letterSpacing: -0.9 + 2.4 * (1 - wordIn), decoration: TextDecoration.none),
                         ),
                       ),
                     ),
@@ -193,33 +203,20 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
   }
 }
 
-/// Seconds since mount, ticking every frame; freeze it for reduced motion.
-class SceneClock extends ValueNotifier<double> {
-  SceneClock(TickerProvider vsync) : super(0) {
-    _ticker = vsync.createTicker((e) => value = e.inMicroseconds / 1e6)..start();
-  }
-  late final Ticker _ticker;
-
-  void freeze() => _ticker.stop();
-
-  @override
-  void dispose() {
-    _ticker.dispose();
-    super.dispose();
-  }
-}
-
 // ───────── Onboarding ─────────
-// One cinematic render per page, full bleed, with a single line of big type over it.
-// Swiping cross-fades the renders with a little parallax; each render also breathes
-// slowly (scale + drift) so the screen never feels like a static poster.
+// A three-beat story about the feeling the app is named after. A free trial starts
+// (the hourglass, time quietly running), it renews while you're not looking (the loop
+// that never stops), and one day it takes your last penny (the coin with a slice
+// missing). The last page lands with a flinch, the wince, and the sign-in screen
+// answers it. Every page shares one stage (stage.dart), so swiping only changes the
+// object on it and the words under it.
 
 class _Page {
-  const _Page(this.name, this.title, this.tone);
-  final String name, title;
+  const _Page(this.name, this.title, this.body, {this.drop = 0});
+  final String name, title, body;
 
-  /// Darkest colour at the bottom of the render; the text scrim fades into it.
-  final Color tone;
+  /// How far the object sits below the stage's usual spot, as a fraction of its height.
+  final double drop;
 
   /// First frame of the loop, shown instantly and whenever video can't play.
   String get still => 'assets/onboarding/$name.jpg';
@@ -229,9 +226,9 @@ class _Page {
 }
 
 const _pagesData = [
-  _Page('renewals', 'Every renewal,\nbefore it hits.', Color(0xFF0B0A15)),
-  _Page('trials', 'Trials end on\nyour terms.', Color(0xFF1E0A07)),
-  _Page('shortfalls', 'See a shortfall\ncoming.', Color(0xFF160708)),
+  _Page('trials', 'It started with\na free trial.', 'Seven days, no charge. You\'d cancel in time.', drop: 0.06),
+  _Page('renewals', 'Then it quietly\nrenewed.', 'And again next month. And the one after that.'),
+  _Page('shortfalls', 'Until it took\nyour last penny.', 'That feeling has a name.'),
 ];
 
 class OnboardingScreen extends StatefulWidget {
@@ -242,22 +239,33 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingState extends State<OnboardingScreen> with SingleTickerProviderStateMixin {
   final _pages = PageController();
-  late final _clock = SceneClock(this);
   int _page = 0;
   bool _prepared = false, _still = false;
 
+  /// The wince: a short, damped shudder when the story reaches the last penny.
+  late final _flinch = AnimationController(vsync: this, duration: const Duration(milliseconds: 650));
+  bool _flinched = false;
+
   /// One muted looping player per page; only the visible page plays.
-  final _videos = [for (final p in _pagesData) VideoPlayerController.asset(p.video, videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true))];
+  late final _videos = [for (final p in _pagesData) stageVideo(p.video, play: false)];
 
   @override
   void initState() {
     super.initState();
     for (final v in _videos) {
-      v
-        ..setLooping(true)
-        ..setVolume(0)
-        ..initialize().then((_) => _syncPlayback(), onError: (_) {}); // still image stays on failure
+      v.addListener(_syncOnReady);
     }
+    splashGone.addListener(_syncPlayback);
+  }
+
+  /// Starts the visible page's loop once its player is ready and the splash has gone.
+  void _syncOnReady() {
+    if (_videos.every((v) => v.value.isInitialized)) {
+      for (final v in _videos) {
+        v.removeListener(_syncOnReady);
+      }
+    }
+    _syncPlayback();
   }
 
   void _syncPlayback() {
@@ -265,9 +273,10 @@ class _OnboardingState extends State<OnboardingScreen> with SingleTickerProvider
     for (var i = 0; i < _videos.length; i++) {
       final v = _videos[i];
       if (!v.value.isInitialized) continue;
-      if (i == _page && !_still) {
+      final want = i == _page && !_still && splashGone.value;
+      if (want && !v.value.isPlaying) {
         v.play();
-      } else {
+      } else if (!want && v.value.isPlaying) {
         v.pause();
       }
     }
@@ -280,21 +289,40 @@ class _OnboardingState extends State<OnboardingScreen> with SingleTickerProvider
     super.didChangeDependencies();
     if (_prepared) return;
     _prepared = true;
+    precacheImage(const AssetImage(kStagePlate), context);
     for (final p in _pagesData) {
       precacheImage(AssetImage(p.still), context);
     }
-    if (MediaQuery.disableAnimationsOf(context)) {
-      _still = true;
-      _clock.freeze();
-    }
+    _still = MediaQuery.disableAnimationsOf(context);
+  }
+
+  void _maybeFlinch() {
+    if (!_last || _flinched) return;
+    _flinched = true;
+    Future.delayed(const Duration(milliseconds: 380), () {
+      if (!mounted || !_last) return;
+      HapticFeedback.heavyImpact();
+      if (!_still) _flinch.forward(from: 0);
+    });
+  }
+
+  /// Horizontal shudder and squeeze from [_flinch]: a few fast, decaying swings.
+  ({double dx, double squeeze}) get _shudder {
+    final f = _flinch.value;
+    if (f == 0 || f == 1) return (dx: 0, squeeze: 1);
+    final decay = math.pow(1 - f, 2).toDouble();
+    return (dx: math.sin(f * math.pi * 7) * 9 * decay, squeeze: 1 - 0.035 * math.sin(math.min(f * 3, 1) * math.pi));
   }
 
   @override
   void dispose() {
+    splashGone.removeListener(_syncPlayback);
+    _flinch.dispose();
     _pages.dispose();
-    _clock.dispose();
     for (final v in _videos) {
-      v.dispose();
+      v
+        ..removeListener(_syncOnReady)
+        ..dispose();
     }
     super.dispose();
   }
@@ -322,58 +350,39 @@ class _OnboardingState extends State<OnboardingScreen> with SingleTickerProvider
       tween: Tween(begin: 0, end: 1),
       duration: const Duration(milliseconds: 1600),
       builder: (_, intro, _) => AnimatedBuilder(
-        animation: Listenable.merge([_pages, _clock]),
+        animation: Listenable.merge([_pages, _flinch]),
         builder: (context, _) {
           final pos = _pages.hasClients && _pages.position.haveDimensions ? _pages.page ?? 0 : _page.toDouble();
-          final now = _clock.value;
-          final w = MediaQuery.sizeOf(context).width;
-          final i0 = pos.floor().clamp(0, _pagesData.length - 1), i1 = pos.ceil().clamp(0, _pagesData.length - 1);
-          final tone = Color.lerp(_pagesData[i0].tone, _pagesData[i1].tone, pos - pos.floor())!;
+          final shudder = _shudder;
+          final lastIndex = _pagesData.length - 1;
 
           return Stack(
             fit: StackFit.expand,
             children: [
-              ColoredBox(color: tone),
-              // Renders: the one being left fades out under the one arriving.
+              const StagePlate(),
+              // Scenes: the one being left dissolves into the one arriving, on the same stage.
               for (var i = 0; i < _pagesData.length; i++)
                 if ((pos - i).abs() < 1)
                   Opacity(
                     opacity: (1 - (pos - i).abs()).clamp(0.0, 1.0) * _span(intro, 0, 0.5),
                     child: Transform.translate(
-                      offset: Offset(-(pos - i) * 0.35 * w, 36 + 6 * math.sin(now * 0.6 + i)),
+                      offset: Offset(i == lastIndex ? shudder.dx * 1.6 : 0, 0),
                       child: Transform.scale(
-                        alignment: const Alignment(0, -0.4),
-                        scale: (1.08 + 0.02 * math.sin(now * 0.35 + i * 2) + 0.06 * (1 - _span(intro, 0, 1)) + 0.05 * (pos - i).abs()),
-                        // Full width so the whole composition shows; the bottom melts into the page tone.
-                        child: Align(
-                          alignment: Alignment.topCenter,
-                          child: ShaderMask(
-                            blendMode: BlendMode.dstIn,
-                            shaderCallback: (r) => const LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [Colors.white, Colors.white, Colors.transparent],
-                              stops: [0, 0.8, 1],
-                            ).createShader(r),
-                            child: Stack(
-                              children: [
-                                Image.asset(_pagesData[i].still, width: w, fit: BoxFit.fitWidth, alignment: Alignment.topCenter),
-                                Positioned.fill(child: _Loop(_videos[i])),
-                              ],
-                            ),
-                          ),
-                        ),
+                        scale: 1.03 - 0.03 * _span(intro, 0, 1),
+                        child: StageScene(still: _pagesData[i].still, video: _videos[i], drop: _pagesData[i].drop),
                       ),
                     ),
                   ),
-              // Scrim so the type always reads.
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [tone.withValues(alpha: 0.35), tone.withValues(alpha: 0), tone.withValues(alpha: 0), tone.withValues(alpha: 0.85), tone],
-                    stops: const [0, 0.14, 0.5, 0.78, 1],
+              // Scrim so the type always reads, even on short phones.
+              IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [kBg.withValues(alpha: 0), kBg.withValues(alpha: 0), kBg.withValues(alpha: 0.8), kBg],
+                      stops: const [0, 0.5, 0.74, 1],
+                    ),
                   ),
                 ),
               ),
@@ -394,36 +403,59 @@ class _OnboardingState extends State<OnboardingScreen> with SingleTickerProvider
                         onPageChanged: (i) {
                           setState(() => _page = i);
                           _syncPlayback();
+                          _maybeFlinch();
                         },
                         itemBuilder: (_, i) {
                           final t = (1 - (pos - i).abs()).clamp(0.0, 1.0) * intro;
-                          final lines = _pagesData[i].title.split('\n');
+                          final page = _pagesData[i];
+                          final lines = page.title.split('\n');
                           return Align(
                             alignment: Alignment.bottomCenter,
                             child: Padding(
-                              padding: const EdgeInsets.fromLTRB(24, 0, 24, 36),
-                              child: ShaderMask(
-                                // Bright at the top, melting into the scene at the bottom.
-                                shaderCallback: (r) => LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [Colors.white, Colors.white.withValues(alpha: 0.62)],
-                                ).createShader(r),
-                                blendMode: BlendMode.modulate,
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    for (var k = 0; k < lines.length; k++)
-                                      _rise(
-                                        _span(t, 0.25 + 0.12 * k, 0.85 + 0.12 * k),
-                                        Text(
-                                          lines[k],
-                                          textAlign: TextAlign.center,
-                                          style: display(44, weight: FontWeight.w500).copyWith(height: 1.08, letterSpacing: -1.8),
+                              padding: const EdgeInsets.fromLTRB(24, 0, 24, 30),
+                              child: Transform.translate(
+                                offset: Offset(i == lastIndex ? shudder.dx : 0, 0),
+                                child: Transform.scale(
+                                  scale: i == lastIndex ? shudder.squeeze : 1,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      ShaderMask(
+                                        // Bright at the top, melting into the scene at the bottom.
+                                        shaderCallback: (r) => LinearGradient(
+                                          begin: Alignment.topCenter,
+                                          end: Alignment.bottomCenter,
+                                          colors: [Colors.white, Colors.white.withValues(alpha: 0.62)],
+                                        ).createShader(r),
+                                        blendMode: BlendMode.modulate,
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            for (var k = 0; k < lines.length; k++)
+                                              _rise(
+                                                _span(t, 0.25 + 0.12 * k, 0.85 + 0.12 * k),
+                                                Text(
+                                                  lines[k],
+                                                  textAlign: TextAlign.center,
+                                                  style: display(42, weight: FontWeight.w500).copyWith(height: 1.08, letterSpacing: -1.7),
+                                                ),
+                                                dy: 22,
+                                              ),
+                                          ],
                                         ),
-                                        dy: 22,
                                       ),
-                                  ],
+                                      const SizedBox(height: 14),
+                                      _rise(
+                                        _span(t, 0.55, 1),
+                                        Text(
+                                          page.body,
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(color: kText.withValues(alpha: 0.58), fontSize: 15.5, height: 1.4, letterSpacing: -0.1),
+                                        ),
+                                        dy: 12,
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -443,11 +475,12 @@ class _OnboardingState extends State<OnboardingScreen> with SingleTickerProvider
                             style: FilledButton.styleFrom(
                               backgroundColor: Colors.white,
                               foregroundColor: Colors.black,
+                              overlayColor: Colors.black,
                               textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: -0.2),
                             ),
                             child: AnimatedSwitcher(
                               duration: const Duration(milliseconds: 220),
-                              child: Text(_last ? 'Get started' : 'Continue', key: ValueKey(_last)),
+                              child: Text(_last ? 'Never again' : 'Continue', key: ValueKey(_last)),
                             ),
                           ),
                         ),
@@ -465,30 +498,6 @@ class _OnboardingState extends State<OnboardingScreen> with SingleTickerProvider
   );
 }
 
-/// The page's video, faded in over the still once frames are actually flowing.
-class _Loop extends StatelessWidget {
-  const _Loop(this.video);
-  final VideoPlayerController video;
-
-  @override
-  Widget build(BuildContext context) {
-    final v = video.value;
-    final live = v.isInitialized && v.isPlaying && v.position > Duration.zero;
-    return AnimatedOpacity(
-      opacity: live ? 1 : 0,
-      duration: const Duration(milliseconds: 450),
-      child: v.isInitialized
-          ? FittedBox(
-              fit: BoxFit.cover,
-              alignment: Alignment.topCenter,
-              clipBehavior: Clip.hardEdge,
-              child: SizedBox.fromSize(size: v.size, child: VideoPlayer(video)),
-            )
-          : const SizedBox.shrink(),
-    );
-  }
-}
-
 /// Story-style segments that fill continuously with the page position.
 class _Progress extends StatelessWidget {
   const _Progress({required this.pos, required this.count});
@@ -502,7 +511,7 @@ class _Progress extends StatelessWidget {
         Expanded(
           child: Container(
             height: 3,
-            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.22), borderRadius: BorderRadius.circular(2)),
+            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.25), borderRadius: BorderRadius.circular(2)),
             alignment: Alignment.centerLeft,
             child: FractionallySizedBox(
               widthFactor: (pos - k + 1).clamp(0.0, 1.0),

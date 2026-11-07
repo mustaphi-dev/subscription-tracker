@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' show AuthException;
 import 'package:url_launcher/url_launcher.dart';
 
 import 'brands.dart';
@@ -14,7 +13,6 @@ import 'countries.dart';
 import 'data.dart';
 import 'home.dart';
 import 'item_tile.dart';
-import 'lock.dart';
 import 'ui.dart';
 
 // ───────── Calendar ─────────
@@ -1068,86 +1066,4 @@ class ConfirmTrialScreen extends ConsumerWidget {
       ),
     );
   }
-}
-
-// ───────── Sign in (email magic link → wince://login-callback) ─────────
-
-class SignInScreen extends StatefulWidget {
-  const SignInScreen({super.key});
-  @override
-  State<SignInScreen> createState() => _SignInState();
-}
-
-class _SignInState extends State<SignInScreen> {
-  final _email = TextEditingController();
-  bool _sent = false, _busy = false;
-  String? _error;
-
-  // supabase_flutter picks up the deep link and completes sign-in; the router then redirects home.
-  Future<void> _send() async {
-    setState(() {
-      _error = null;
-      _busy = true;
-    });
-    try {
-      await db.auth.signInWithOtp(email: _email.text.trim(), emailRedirectTo: 'wince://login-callback');
-      setState(() => _sent = true);
-    } on AuthException catch (e) {
-      setState(() => _error = e.message);
-    } catch (e) {
-      debugPrint('$e');
-      setState(() => _error = 'Something went wrong. Check your connection and try again.');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    body: Ambient(
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Spacer(flex: 2),
-              const Align(alignment: Alignment.centerLeft, child: AppLogo(size: 56)),
-              const SizedBox(height: 28),
-              Text('Every renewal,\nbefore it hits.', style: display(38)),
-              const SizedBox(height: 12),
-              const Text(
-                'Subscriptions, free trials, pay later plans and every account balance, in one place.',
-                style: TextStyle(color: kMuted, height: 1.4),
-              ),
-              const Spacer(flex: 3),
-              TextField(
-                controller: _email,
-                keyboardType: TextInputType.emailAddress,
-                autofillHints: const [AutofillHints.email],
-                decoration: const InputDecoration(hintText: 'you@example.com'),
-              ),
-              AnimatedSize(
-                duration: const Duration(milliseconds: 300),
-                curve: springOut,
-                child: _sent || _error != null
-                    ? Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: Text(_error ?? 'Check your inbox and tap "Sign in" on this phone.', style: TextStyle(color: _error == null ? kMint : kCrimson)),
-                      )
-                    : const SizedBox(width: double.infinity),
-              ),
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: _busy ? null : _send,
-                child: _busy
-                    ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2, color: kBg))
-                    : Text(_sent ? 'Resend link' : 'Continue with email'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
 }

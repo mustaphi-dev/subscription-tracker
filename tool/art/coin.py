@@ -1,6 +1,6 @@
 """Shortfalls: a heavy proof-finish coin with a slice missing. The slice
 drifts out and back once per loop; its cut faces glow red, so the gap is
-the first thing you see."""
+the first thing you see. The rest of the light is the violet of the Wince stage."""
 import math, os, sys
 sys.path.insert(0, os.path.dirname(__file__))
 from common import *
@@ -31,7 +31,7 @@ mirror = bpy.data.materials.new('Dial')
 mirror.use_nodes = True
 nt = mirror.node_tree
 p = nt.nodes['Principled BSDF']
-p.inputs['Base Color'].default_value = (0.36, 0.34, 0.34, 1)
+p.inputs['Base Color'].default_value = (0.35, 0.35, 0.37, 1)
 p.inputs['Metallic'].default_value = 1.0
 p.inputs['Roughness'].default_value = 0.2
 p.inputs['Anisotropic'].default_value = 0.9
@@ -41,14 +41,14 @@ tg.direction_type = 'RADIAL'
 tg.axis = 'Z'
 nt.links.new(tg.outputs['Tangent'], p.inputs['Tangent'])
 # raised rim and centre ring: polished
-satin = chrome('Polish', tint=(0.93, 0.92, 0.92), rough=0.03, rough_var=0.03, scale=3.0)
+satin = chrome('Polish', tint=(0.93, 0.93, 0.95), rough=0.03, rough_var=0.03, scale=3.0)
 
 # reeded edge: fine vertical grooves from the angle around the axis
 reed = bpy.data.materials.new('Reed')
 reed.use_nodes = True
 nt = reed.node_tree
 p = nt.nodes['Principled BSDF']
-p.inputs['Base Color'].default_value = (0.7, 0.68, 0.68, 1)
+p.inputs['Base Color'].default_value = (0.69, 0.69, 0.71, 1)
 p.inputs['Metallic'].default_value = 1.0
 p.inputs['Roughness'].default_value = 0.14
 tc = nt.nodes.new('ShaderNodeTexCoord')
@@ -123,16 +123,16 @@ inner.parent = rig
 inner.rotation_euler = (0, 0, math.radians(38))
 
 world_studio([(0.0, 0.0), (0.47, 0.0), (0.53, 0.012), (0.555, 0.2), (0.58, 0.012), (0.8, 0.02),
-              (1.0, 0.04)], tint=(1.0, 0.92, 0.92), strength=1.0)
+              (1.0, 0.04)], tint=(0.88, 0.86, 1.0), strength=1.0)
 CAM = (0, -9.6, 1.25)
 rig.rotation_euler = (math.radians(90 - 14), 0, math.radians(-40))
 hero = mirror_spot(body, (-0.5, 0.0, 0.075), (0, 0, 1), CAM, 7.0, offset=(0.4, 0, 0.3))
 softbox_card('Hero', hero, (0, 0, 0), (1.1, 9), 0.8)
 softbox_card('Top', (-1.0, 1.0, 6.0), (0, 0, 0), (6, 1.4), 0.8)
 softbox_card('Left', (-6.0, -1.5, 0.6), (0, 0, 0), (0.8, 7), 0.7)
-softbox_card('RimR', (5.0, 3.0, 0.5), (0, 0, 0), (0.5, 7), 1.5, color=(1.0, 0.35, 0.3))
+softbox_card('RimR', (5.0, 3.0, 0.5), (0, 0, 0), (0.5, 7), 1.5, color=(0.55, 0.45, 1.0))
 softbox_card('StripA', (-2.8, -12.0, 2.5), (0, 0, 0), (0.35, 8), 1.1)
-softbox_card('Floor', (0.5, -2.0, -5.0), (0, 0, 0), (6, 2), 0.1, color=(0.9, 0.2, 0.15))
+softbox_card('Floor', (0.5, -2.0, -5.0), (0, 0, 0), (6, 2), 0.1, color=(0.35, 0.22, 0.9))
 sc.view_settings.exposure = float(A.get('ev', -0.3))
 
 # ---- motion: the slice breathes out along its bisector; the coin sways

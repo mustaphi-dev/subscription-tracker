@@ -102,9 +102,9 @@ class AppLogo extends StatelessWidget {
   final double size;
   @override
   Widget build(BuildContext context) => ClipRRect(
-        // Same art as the launcher icon, with iOS-style corner rounding.
+        // Same art as the launcher icon, with iOS-style corner rounding; the dark icon on dark themes.
         borderRadius: BorderRadius.circular(size * 0.225),
-        child: Image.asset('assets/brand/icon.webp', width: size, height: size, filterQuality: FilterQuality.medium),
+        child: Image.asset(Theme.of(context).brightness == Brightness.dark ? 'assets/brand/icon_dark.webp' : 'assets/brand/icon.webp', width: size, height: size, filterQuality: FilterQuality.medium),
       );
 }
 
