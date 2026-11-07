@@ -555,6 +555,11 @@ class _Dismissed extends Notifier<Set<String>> {
     state = {...state, ...keys};
     _storage.write(key: 'dismissed_alerts', value: jsonEncode(state.toList()));
   }
+
+  void removeAll(Iterable<String> keys) {
+    state = state.difference(keys.toSet());
+    _storage.write(key: 'dismissed_alerts', value: jsonEncode(state.toList()));
+  }
 }
 
 final _dismissedAlerts = NotifierProvider<_Dismissed, Set<String>>(_Dismissed.new);
@@ -604,7 +609,12 @@ class AlertsSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final alerts = ref.watch(alertsProvider);
-    void clear(Iterable<String> keys) => ref.read(_dismissedAlerts.notifier).addAll(keys);
+    void clear(Iterable<String> keys) {
+      final gone = keys.toList(), notifier = ref.read(_dismissedAlerts.notifier);
+      notifier.addAll(gone);
+      showToast(context, gone.length == 1 ? 'Notification cleared' : '${gone.length} notifications cleared',
+          closeSheets: false, onUndo: () => notifier.removeAll(gone));
+    }
     return ListView(
       controller: scroll,
       padding: const EdgeInsets.only(bottom: 16),
@@ -769,7 +779,7 @@ class _TrialRings extends StatelessWidget {
               final tone = urgent ? kCrimson : kAccent;
               final known = t.postTrialAmount != null;
               return Surface(
-                onTap: () => showSheet(context, DaySheet(day: t.trialEnd!, items: [t])),
+                onTap: () => showSheet(context, Padding(padding: const EdgeInsets.only(bottom: 8), child: ItemRow(t, initiallyOpen: true, pinned: true))),
                 padding: const EdgeInsets.all(16),
                 border: urgent ? kCrimson.withValues(alpha: 0.35) : null,
                 child: SizedBox(

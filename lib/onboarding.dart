@@ -306,12 +306,12 @@ class _OnboardingState extends State<OnboardingScreen> with SingleTickerProvider
     });
   }
 
-  /// Horizontal shudder and squeeze from [_flinch]: a few fast, decaying swings.
+  /// Horizontal flinch from [_flinch]: one small, fading swing.
   ({double dx, double squeeze}) get _shudder {
     final f = _flinch.value;
     if (f == 0 || f == 1) return (dx: 0, squeeze: 1);
     final decay = math.pow(1 - f, 2).toDouble();
-    return (dx: math.sin(f * math.pi * 7) * 9 * decay, squeeze: 1 - 0.035 * math.sin(math.min(f * 3, 1) * math.pi));
+    return (dx: math.sin(f * math.pi * 2) * 3 * decay, squeeze: 1);
   }
 
   @override

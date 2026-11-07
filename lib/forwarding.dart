@@ -91,10 +91,10 @@ class _Step extends StatelessWidget {
           width: 32,
           height: 32,
           alignment: Alignment.center,
-          decoration: BoxDecoration(color: kMint.withValues(alpha: 0.16), shape: BoxShape.circle),
+          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
           child: Text(
             '$n',
-            style: const TextStyle(color: kMint, fontWeight: FontWeight.w700),
+            style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w700),
           ),
         ),
         const SizedBox(width: 14),
