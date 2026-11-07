@@ -46,13 +46,15 @@ light in them is the stage's violet; the only other colour is the red cut in the
     python coin.py       -- --w 960 --h 1280 --n 120 --samples 64 --out frames/shortfalls
     python wince/w3d.py  -- --w 960 --h 1200 --n 120 --samples 48 --out frames/signin
 
-    PY=python3 ./encode.sh frames/trials     trials --sat 2.0
+    PY=python3 ./encode.sh frames/trials     trials --sat 2.0 --dy 0.06
     PY=python3 ./encode.sh frames/renewals   renewals
     PY=python3 ./encode.sh frames/shortfalls shortfalls
     PY=python3 ./encode.sh frames/signin     signin
 
 The hourglass sand glows violet. AgX mutes saturated violets toward pastel, so its
 frames get `--sat 2.0`, a chroma boost on the object before it goes on the stage.
+`--dy 0.06` sits the hourglass 6% of the frame lower. Only the object moves, so the
+stage behind it still lines up with every other page.
 
 The sign-in W is extruded from the same `wince_logo.glyph()` geometry as the icon, in
 black lacquer with violet rim light. It sways slowly, and once per loop the cut legs
