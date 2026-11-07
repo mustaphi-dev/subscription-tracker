@@ -11,6 +11,8 @@ flutter run
 
 Copy `env.example.json` to `env.json`, fill it in, then run `flutter run --dart-define-from-file=env.json` (VS Code's launch config already passes it). `LOGO_DEV_KEY` is your logo.dev publishable key; without it, merchant and bank logos fall back to letter tiles.
 
+To see the onboarding again, sign out and add `--dart-define=REPLAY_ONBOARDING=true`. That forgets on every launch that onboarding was seen. Deleting the app isn't enough on iOS, because the keychain keeps the flag. Signed-in users always skip onboarding.
+
 ## Backend setup
 
 ```sh

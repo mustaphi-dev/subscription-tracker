@@ -13,7 +13,12 @@ import 'ui.dart';
 final onboarded = ValueNotifier(false);
 const _storage = FlutterSecureStorage();
 
-Future<void> loadOnboarded() async => onboarded.value = await _storage.read(key: 'onboarded') == 'yes';
+/// Run with `--dart-define=REPLAY_ONBOARDING=true` to forget it on every launch, so the
+/// story can be tested again. Uninstalling isn't enough on iOS: the keychain keeps it.
+Future<void> loadOnboarded() async {
+  if (const bool.fromEnvironment('REPLAY_ONBOARDING')) await _storage.delete(key: 'onboarded');
+  onboarded.value = await _storage.read(key: 'onboarded') == 'yes';
+}
 
 Future<void> finishOnboarding() async {
   await _storage.write(key: 'onboarded', value: 'yes');
