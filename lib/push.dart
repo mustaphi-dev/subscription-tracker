@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show AuthChangeEvent;
 
 import 'data.dart';
+import 'firebase_options.dart';
 import 'item_tile.dart' show confirmPath;
 
 final _local = FlutterLocalNotificationsPlugin();
@@ -15,7 +16,7 @@ const _channel = AndroidNotificationChannel('alerts', 'Trial & shortfall alerts'
 /// FCM + local notifications. No-op if Firebase isn't configured yet (`flutterfire configure`).
 Future<void> initPush(GoRouter router) async {
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   } catch (_) {
     return;
   }

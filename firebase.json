@@ -1,0 +1,30 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "trywince-app",
+          "appId": "1:310135653018:android:0cf5ab66bdc305e6dd9523",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "trywince-app",
+          "appId": "1:310135653018:ios:69588e211aee93e5dd9523",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "trywince-app",
+          "configurations": {
+            "android": "1:310135653018:android:0cf5ab66bdc305e6dd9523",
+            "ios": "1:310135653018:ios:69588e211aee93e5dd9523"
+          }
+        }
+      }
+    }
+  }
+}
