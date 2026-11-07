@@ -4,12 +4,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-import 'countries.dart';
 import 'country.dart';
 import 'data.dart';
-import 'home.dart';
 import 'lock.dart';
+import 'signin.dart' show kPrivacyUrl, kTermsUrl;
 import 'ui.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -19,165 +19,112 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileState extends ConsumerState<ProfileScreen> {
-  bool? _bio;
-
-  @override
-  void initState() {
-    super.initState();
-    PinStore.biometricEnabled().then((v) => mounted ? setState(() => _bio = v) : null);
-  }
-
   @override
   Widget build(BuildContext context) {
     final user = db.auth.currentUser;
     final base = ref.watch(baseCurrencyProvider).value ?? 'GBP';
     final country = ref.watch(countryProvider).value;
-    final sources = ref.watch(sourcesProvider).value ?? [];
-    final items = (ref.watch(itemsProvider).value ?? []).where((i) => i.status == 'active').toList();
-    final trials = items.where((i) => i.isTrial).length;
+    final name = user?.userMetadata?['full_name'] as String?;
 
-    // One neutral icon style for every row; colour is reserved for state (the switch) and danger (sign out).
-    Widget row(IconData icon, String title, {String? sub, Widget? trailing, VoidCallback? onTap}) => Pressable(
-          scale: 0.99,
-          onTap: onTap ?? () {},
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(color: kSurfaceHi, borderRadius: BorderRadius.circular(11)),
-                child: Icon(icon, size: 19, color: kText),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
-                  if (sub != null) Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: caption),
-                ]),
-              ),
-              trailing ?? (onTap == null ? const SizedBox() : const Icon(CupertinoIcons.chevron_right, color: kFaint)),
-            ]),
+    // Tall, borderless, translucent rows packed tight; the page gradient shows through them.
+    Widget row(IconData icon, String title, VoidCallback onTap) => Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+          child: Pressable(
+            scale: 0.98,
+            onTap: onTap,
+            child: Container(
+              height: 64,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.07), borderRadius: BorderRadius.circular(16)),
+              child: Row(children: [
+                Icon(icon, size: 24, color: kText),
+                const SizedBox(width: 16),
+                Expanded(child: Text(title, style: const TextStyle(fontSize: 17))),
+                const Icon(CupertinoIcons.chevron_right, size: 16, color: kText),
+              ]),
+            ),
           ),
         );
-    Widget group(List<Widget> rows, {String? footer}) => Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Surface(
-              padding: EdgeInsets.zero,
-              child: Column(children: [
-                for (var k = 0; k < rows.length; k++) ...[if (k > 0) const Divider(height: 1, indent: 66, color: kLine), rows[k]],
-              ]),
-            ),
-            if (footer != null) Padding(padding: const EdgeInsets.fromLTRB(16, 8, 16, 0), child: Text(footer, style: caption)),
-          ]),
-        );
-    Widget stat(String value, String label) => Expanded(
-          child: Column(children: [Text(value, style: display(20)), Text(label, style: caption)]),
-        );
-    const statDivider = SizedBox(height: 28, child: VerticalDivider(width: 1, color: kLine));
+    const gap = SizedBox(height: 18);
 
     return Scaffold(
-      body: Ambient(
-        child: CustomScrollView(
-          physics: const BouncingScrollPhysics(),
-          slivers: [
-            SliverToBoxAdapter(
-              child: SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 24, 0),
-                  child: Row(children: [
-                    const GlassBackButton(),
-                    const SizedBox(width: 12),
-                    Text('Profile', style: display(20)),
-                  ]),
-                ),
+      backgroundColor: kBg,
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            stops: [0, 0.45, 0.9],
+            colors: [kGlow, Color(0xFF241A6E), kBg],
+          ),
+        ),
+        child: SafeArea(
+          bottom: false,
+          child: ListView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.only(bottom: 40),
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 4, 16, 16),
+                child: Align(alignment: Alignment.centerLeft, child: GlassBackButton()),
               ),
-            ),
-            // Identity and counts in one card instead of a floating avatar plus three loose boxes.
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: Surface(
-                  padding: const EdgeInsets.all(18),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(20, 32, 20, 30),
+                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(22)),
                   child: Column(children: [
-                    Row(children: [
-                      const ProfileAvatar(size: 56),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(user?.email ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                          if (user != null) Text('Member since ${DateFormat('MMMM y').format(DateTime.parse(user.createdAt))}', style: caption),
-                        ]),
-                      ),
-                    ]),
+                    Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.18)),
+                      child: const ProfileAvatar(size: 84),
+                    ),
                     const SizedBox(height: 16),
-                    const Divider(height: 1, color: kLine),
-                    const SizedBox(height: 14),
-                    Row(children: [
-                      stat('${sources.length}', 'Accounts'),
-                      statDivider,
-                      stat('${items.length}', 'Tracking'),
-                      statDivider,
-                      stat('$trials', 'Trials'),
-                    ]),
+                    if (name != null && name.isNotEmpty) ...[
+                      Text(name, style: display(24, weight: FontWeight.w600)),
+                      const SizedBox(height: 4),
+                      Text(user?.email ?? '', style: TextStyle(color: Colors.white.withValues(alpha: 0.65))),
+                    ] else
+                      Text(user?.email ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: display(20, weight: FontWeight.w600)),
+                    if (user != null) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
+                        child: Text('Member since ${DateFormat('MMMM y').format(DateTime.parse(user.createdAt))}',
+                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                      ),
+                    ],
                   ]),
                 ),
               ),
-            ),
-            const SliverToBoxAdapter(child: SectionHeader('General')),
-            SliverToBoxAdapter(
-              child: group([
-                row(CupertinoIcons.arrow_right_arrow_left_circle, 'Display currency',
-                    sub: currencyChoices(base).where((c) => c.$1 == base).firstOrNull?.$3 ?? base,
-                    trailing: CurrencyPill(current: base, onChanged: setBaseCurrency)),
-                row(CupertinoIcons.globe, 'Country',
-                    sub: switch (countryByCode(country)) {
-                      null => 'Not set',
-                      final c => '${c.flag}  ${c.name}',
-                    },
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => CountryScreen(current: country ?? ''))),
-                ),
-                row(CupertinoIcons.creditcard, 'Manage accounts', sub: 'Banks, cards and wallets', onTap: () {
-                  ref.read(tabProvider.notifier).set(2);
-                  context.pop();
-                }),
-              ]),
-            ),
-            const SliverToBoxAdapter(child: SectionHeader('Security')),
-            SliverToBoxAdapter(
-              child: group(footer: 'The app locks ${lockTimeout.inSeconds} seconds after you leave it.', [
-                row(CupertinoIcons.viewfinder, 'Unlock with Face ID',
-                    sub: 'Unlock the app by looking at your phone',
-                    trailing: Switch(
-                      value: _bio ?? true,
-                      onChanged: (v) async {
-                        HapticFeedback.selectionClick();
-                        setState(() => _bio = v);
-                        await PinStore.setBiometric(v);
-                        await db.from('profiles').update({'biometric_enabled': v}).eq('id', user!.id);
-                      },
-                    )),
-                row(CupertinoIcons.lock, 'Change PIN', sub: 'The 6-digit code that unlocks the app', onTap: _changePin),
-              ]),
-            ),
-            const SliverToBoxAdapter(child: SectionHeader('Email forwarding')),
-            SliverToBoxAdapter(child: _ForwardingCard(ref.watch(inboundAddressProvider).value)),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 32, 16, 48),
+              row(CupertinoIcons.arrow_right_arrow_left_circle, 'Currency', () async {
+                final picked = await pickFromSheet(context,
+                    title: 'Display currency',
+                    selected: base,
+                    options: [for (final (code, flag, name) in currencyChoices(base)) (code, '$flag  $code', name)]);
+                if (picked != null && picked != base) setBaseCurrency(picked);
+              }),
+              row(CupertinoIcons.globe, 'Country',
+                  () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => CountryScreen(current: country ?? '')))),
+              row(CupertinoIcons.envelope, 'Email forwarding', () => context.push('/forwarding')),
+              row(CupertinoIcons.lock, 'Security', () => showSheet(context, _Security(onChangePin: _changePin))),
+              gap,
+              row(CupertinoIcons.chat_bubble, 'Support', () => launchUrl(Uri.parse('mailto:$kSupportEmail?subject=Wince%20support'))),
+              row(CupertinoIcons.info, 'About', () => showSheet(context, const _About())),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
                 child: TextButton(
                   style: TextButton.styleFrom(foregroundColor: kCrimson, minimumSize: const Size.fromHeight(48)),
                   onPressed: () async {
                     HapticFeedback.mediumImpact();
-                    await db.auth.signOut();
+                    await signOut();
                   },
                   child: const Text('Sign out', style: TextStyle(fontWeight: FontWeight.w600)),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -204,25 +151,98 @@ class _ProfileState extends ConsumerState<ProfileScreen> {
       ));
 }
 
-/// Shows the forwarding address; tapping opens the how-to, which has the copy button.
-class _ForwardingCard extends StatelessWidget {
-  const _ForwardingCard(this.address);
-  final String? address;
+const kSupportEmail = 'hello@trywince.app';
+
+/// Face ID and the PIN, in one sheet so the profile stays a plain list.
+class _Security extends StatefulWidget {
+  const _Security({required this.onChangePin});
+  final VoidCallback onChangePin;
+  @override
+  State<_Security> createState() => _SecurityState();
+}
+
+class _SecurityState extends State<_Security> {
+  bool? _bio;
+
+  @override
+  void initState() {
+    super.initState();
+    PinStore.biometricEnabled().then((v) => mounted ? setState(() => _bio = v) : null);
+  }
+
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Surface(
-          onTap: () => context.push('/forwarding'),
-          child: Row(children: [
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Forward sign-up emails', style: TextStyle(fontWeight: FontWeight.w500)),
-                const SizedBox(height: 2),
-                Text(address ?? '…', maxLines: 1, overflow: TextOverflow.ellipsis, style: caption),
+        padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Security', style: display(22)),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 56,
+            child: Row(children: [
+              const Expanded(child: Text('Unlock with Face ID', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500))),
+              Switch(
+                value: _bio ?? true,
+                onChanged: (v) async {
+                  HapticFeedback.selectionClick();
+                  setState(() => _bio = v);
+                  await PinStore.setBiometric(v);
+                  await db.from('profiles').update({'biometric_enabled': v}).eq('id', db.auth.currentUser!.id);
+                },
+              ),
+            ]),
+          ),
+          const Divider(height: 1, color: kLine),
+          Pressable(
+            scale: 0.99,
+            onTap: () {
+              Navigator.of(context).pop();
+              widget.onChangePin();
+            },
+            child: const SizedBox(
+              height: 56,
+              child: Row(children: [
+                Expanded(child: Text('Change PIN', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500))),
+                Icon(CupertinoIcons.chevron_right, size: 16, color: kFaint),
               ]),
             ),
-            const Icon(CupertinoIcons.chevron_right, color: kFaint, size: 18),
-          ]),
-        ),
+          ),
+          const SizedBox(height: 8),
+          Text('The app locks ${lockTimeout.inSeconds} seconds after you leave it.', style: caption),
+        ]),
       );
+}
+
+/// The app, in one sheet: what it is, and where the legal pages live.
+class _About extends StatelessWidget {
+  const _About();
+  @override
+  Widget build(BuildContext context) {
+    Widget link(String title, VoidCallback onTap) => Pressable(
+          scale: 0.99,
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Row(children: [
+              Expanded(child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500))),
+              const Icon(CupertinoIcons.arrow_up_right, size: 16, color: kFaint),
+            ]),
+          ),
+        );
+    void open(String url) => launchUrl(Uri.parse(url), mode: LaunchMode.inAppBrowserView);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.asset('assets/brand/icon_dark.webp', width: 64, height: 64)),
+        const SizedBox(height: 14),
+        Text('Wince', style: display(24)),
+        const SizedBox(height: 6),
+        const Text('Catch trials and renewals before they catch you.', textAlign: TextAlign.center, style: TextStyle(color: kMuted)),
+        const SizedBox(height: 20),
+        const Divider(height: 1, color: kLine),
+        link('Privacy Policy', () => open(kPrivacyUrl)),
+        const Divider(height: 1, color: kLine),
+        link('Terms of Service', () => open(kTermsUrl)),
+      ]),
+    );
+  }
 }

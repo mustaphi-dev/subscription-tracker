@@ -11,15 +11,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 
+import 'data.dart';
 import 'ui.dart';
 
 const _storage = FlutterSecureStorage();
 const _pinLength = 6;
 const lockTimeout = Duration(seconds: 15);
 
-/// Salted SHA-256 PIN in Keychain / Keystore. Never leaves the device.
+/// Salted SHA-256 PIN in Keychain / Keystore. Never leaves the device. It belongs to the
+/// account that set it: signing back in keeps it, a different account sets its own.
 class PinStore {
-  static Future<bool> hasPin() async => await _storage.read(key: 'pin_hash') != null;
+  static Future<bool> hasPin() async {
+    if (await _storage.read(key: 'pin_hash') == null) return false;
+    final owner = await _storage.read(key: 'pin_owner');
+    final uid = db.auth.currentUser?.id;
+    if (owner == null || uid == null || owner == uid) return true; // PINs set before owners were stored count as yours
+    await clear();
+    return false;
+  }
 
   static String _hash(String pin, String salt) => sha256.convert(utf8.encode('$salt:$pin')).toString();
 
@@ -27,6 +36,7 @@ class PinStore {
     final salt = base64Url.encode(List.generate(16, (_) => Random.secure().nextInt(256)));
     await _storage.write(key: 'pin_salt', value: salt);
     await _storage.write(key: 'pin_hash', value: _hash(pin, salt));
+    if (db.auth.currentUser?.id case final uid?) await _storage.write(key: 'pin_owner', value: uid);
     await _storage.delete(key: 'pin_fails');
   }
 
@@ -53,6 +63,13 @@ class PinStore {
     return 0;
   }
 
+  /// Forgets the PIN and its lockout, so a new one is set at the next sign-in.
+  static Future<void> clear() async {
+    for (final k in ['pin_hash', 'pin_salt', 'pin_owner', 'pin_fails', 'pin_locked_until', 'biometric']) {
+      await _storage.delete(key: k);
+    }
+  }
+
   static Future<bool> biometricEnabled() async => await _storage.read(key: 'biometric') != 'off';
   static Future<void> setBiometric(bool on) => _storage.write(key: 'biometric', value: on ? 'on' : 'off');
 }
@@ -75,6 +92,12 @@ class LockController extends Notifier<bool> {
 
 final lockProvider = NotifierProvider<LockController, bool>(LockController.new);
 
+/// Signs out. The PIN stays for when this account signs back in, unless [resetPin] (Forgot PIN).
+Future<void> signOut({bool resetPin = false}) async {
+  if (resetPin) await PinStore.clear();
+  await db.auth.signOut();
+}
+
 /// App-switcher privacy shield: true while inactive/paused.
 class ObscureController extends Notifier<bool> {
   @override
@@ -89,11 +112,7 @@ class PrivacyShield extends StatelessWidget {
   @override
   Widget build(BuildContext context) => BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
-        child: Container(
-          color: kBg.withValues(alpha: 0.7),
-          alignment: Alignment.center,
-          child: const AppLogo(size: 84),
-        ),
+        child: ColoredBox(color: kBg.withValues(alpha: 0.7)),
       );
 }
 
@@ -130,6 +149,7 @@ class _LockState extends ConsumerState<LiquidGlassLockScreen> {
   String? _message;
   int _shake = 0;
   bool _bioAvailable = false;
+  bool _forgot = false; // showing the "sign out to reset" confirmation
 
   @override
   void initState() {
@@ -250,13 +270,53 @@ class _LockState extends ConsumerState<LiquidGlassLockScreen> {
                   child: Text(_message ?? '', style: const TextStyle(color: kCrimson, fontSize: 13))),
             ),
             const Spacer(),
-            _keypad(),
-            const SizedBox(height: 32),
+            if (_forgot) _forgotPanel() else _keypad(),
+            SizedBox(
+              height: 48,
+              child: widget.setup || _forgot
+                  ? null
+                  : TextButton(
+                      style: TextButton.styleFrom(foregroundColor: kMuted),
+                      onPressed: () => setState(() => _forgot = true),
+                      child: const Text('Forgot PIN?'),
+                    ),
+            ),
+            const SizedBox(height: 8),
           ]),
         ),
       ),
     );
   }
+
+  /// A forgotten PIN can't be recovered (only its hash is stored), so the way back is to
+  /// sign in again by email and choose a new one. Nothing in the account is lost.
+  Widget _forgotPanel() => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(children: [
+          const Text('Reset your PIN', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          const Text(
+            'We\'ll sign you out. Sign back in with your email and choose a new PIN. Your data stays as it is.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: kMuted, height: 1.4),
+          ),
+          const SizedBox(height: 24),
+          FilledButton(
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+            onPressed: () {
+              HapticFeedback.mediumImpact();
+              signOut(resetPin: true);
+            },
+            child: const Text('Sign out and reset'),
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: kMuted, minimumSize: const Size.fromHeight(48)),
+            onPressed: () => setState(() => _forgot = false),
+            child: const Text('Cancel'),
+          ),
+        ]),
+      );
 
   Widget _keypad() {
     Widget key(Widget child, VoidCallback? onTap, {String? label}) => Semantics(

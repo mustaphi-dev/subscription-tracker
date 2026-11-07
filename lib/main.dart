@@ -71,7 +71,7 @@ final router = GoRouter(
     GoRoute(
       path: '/signin',
       pageBuilder: (_, s) => _stagePage(s, const SignInScreen()),
-      routes: [GoRoute(path: 'email', pageBuilder: (_, s) => _stagePage(s, const EmailScreen()))],
+      routes: [GoRoute(path: 'email', pageBuilder: (_, s) => _stagePage(s, EmailScreen(email: s.extra as String?)))],
     ),
     GoRoute(path: '/country', builder: (_, _) => const CountryScreen()),
     GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),
@@ -140,6 +140,8 @@ class _AppState extends ConsumerState<App> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    // The PIN is per sign-in: re-check after every auth change so a new user sets their own.
+    ref.listen(uidProvider, (_, _) => PinStore.hasPin().then((v) => mounted ? setState(() => _hasPin = v) : null));
     // Keep the home-screen widget in sync with live data.
     ref.listen(itemsProvider, (_, next) {
       final items = next.value;
@@ -166,7 +168,8 @@ class _AppState extends ConsumerState<App> with WidgetsBindingObserver {
               onDone: () => setState(() => _hasPin = true),
             ),
           ),
-        if (obscured) const Positioned.fill(child: PrivacyShield()),
+        // The lock screen already hides content; skip the blur so Face ID prompts don't flash it.
+        if (obscured && !locked) const Positioned.fill(child: PrivacyShield()),
         const Positioned.fill(child: SplashOverlay()),
       ]),
     );

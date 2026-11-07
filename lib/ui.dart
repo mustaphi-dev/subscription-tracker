@@ -22,6 +22,8 @@ const kText = Color(0xFFF4F5F7);
 const kMuted = Color(0xFF8B909C);
 const kFaint = Color(0xFF545966);
 const kAccent = Color(0xFF8B7CFF);
+/// The blue-violet glow at the top of every page (and the profile's gradient).
+const kGlow = Color(0xFF5A3FF0);
 const kMint = Color(0xFF34D399);
 const kAmber = Color(0xFFFFB547);
 const kCrimson = Color(0xFFFF5C6C);
@@ -318,7 +320,7 @@ class _GlassSearchFieldState extends State<GlassSearchField> {
 
 /// Single soft glow behind the top of a screen, tinted by context.
 class Ambient extends StatelessWidget {
-  const Ambient({super.key, required this.child, this.color = kAccent});
+  const Ambient({super.key, required this.child, this.color = kGlow});
   final Widget child;
   final Color color;
   @override
@@ -333,7 +335,7 @@ class Ambient extends StatelessWidget {
             duration: const Duration(milliseconds: 700),
             decoration: BoxDecoration(
               gradient: RadialGradient(
-                colors: [color.withValues(alpha: 0.32), color.withValues(alpha: 0)],
+                colors: [color.withValues(alpha: 0.7), color.withValues(alpha: 0)],
               ),
             ),
           ),

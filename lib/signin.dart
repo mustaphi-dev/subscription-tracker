@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show AuthChangeEvent, AuthException, AuthState;
 import 'package:url_launcher/url_launcher.dart';
@@ -29,6 +30,16 @@ const kTermsUrl = 'https://mustaphi-dev.github.io/subscription-tracker/terms.htm
 const _heroStill = 'assets/onboarding/signin.jpg';
 const _heroVideo = 'assets/onboarding/signin.mp4';
 
+/// The last address a link was sent to, kept on the phone through sign-out so coming back is one tap.
+const _store = FlutterSecureStorage();
+Future<String?> _lastEmail() => _store.read(key: 'last_email');
+
+/// adams…@gmail.com: enough to recognise, short enough for a button.
+String shortEmail(String email) {
+  final at = email.indexOf('@');
+  return at > 8 ? '${email.substring(0, 6)}…${email.substring(at)}' : email;
+}
+
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
   @override
@@ -37,6 +48,13 @@ class SignInScreen extends StatefulWidget {
 
 class _SignInState extends State<SignInScreen> {
   VideoPlayerController? _video;
+  String? _last;
+
+  @override
+  void initState() {
+    super.initState();
+    _lastEmail().then((v) => mounted ? setState(() => _last = v) : null);
+  }
 
   @override
   void didChangeDependencies() {
@@ -50,16 +68,16 @@ class _SignInState extends State<SignInScreen> {
     super.dispose();
   }
 
-  void _google() {
-    // UI only for now; Google sign-in gets wired up with Supabase OAuth later.
+  void _soon(String provider) {
+    // UI only for now; Google and Apple get wired up with Supabase OAuth later.
     HapticFeedback.selectionClick();
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        const SnackBar(
+        SnackBar(
           behavior: SnackBarBehavior.floating,
           backgroundColor: kSurfaceHi,
-          content: Text('Google sign-in is coming soon. Use email for now.', style: TextStyle(color: kText)),
+          content: Text('$provider sign-in is coming soon. Use email for now.', style: const TextStyle(color: kText)),
         ),
       );
   }
@@ -98,16 +116,40 @@ class _SignInState extends State<SignInScreen> {
                     _span(t, 0.5, 1),
                     Column(
                       children: [
-                        Pill(onTap: _google, icon: const FaIcon(FontAwesomeIcons.google, size: 18), label: 'Continue with Google'),
-                        const SizedBox(height: 12),
-                        Pill.quiet(
+                        Pill(
                           onTap: () {
                             HapticFeedback.selectionClick();
-                            context.push('/signin/email');
+                            context.push('/signin/email', extra: _last);
                           },
                           icon: const FaIcon(FontAwesomeIcons.envelope, size: 18),
-                          label: 'Continue with email',
+                          label: _last == null ? 'Continue with email' : 'Continue as ${shortEmail(_last!)}',
                         ),
+                        const SizedBox(height: 12),
+                        Row(children: [
+                          Expanded(
+                            child: Pill.quiet(
+                              onTap: () => _soon('Google'),
+                              icon: const FaIcon(FontAwesomeIcons.google, size: 20),
+                              label: 'Continue with Google',
+                              iconOnly: true,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Pill.quiet(
+                              onTap: () => _soon('Apple'),
+                              icon: const FaIcon(FontAwesomeIcons.apple, size: 23),
+                              label: 'Continue with Apple',
+                              iconOnly: true,
+                            ),
+                          ),
+                        ]),
+                        if (_last != null)
+                          TextButton(
+                            style: TextButton.styleFrom(foregroundColor: kMuted, minimumSize: const Size.fromHeight(44)),
+                            onPressed: () => context.push('/signin/email'),
+                            child: const Text('Use another email'),
+                          ),
                       ],
                     ),
                     dy: 20,
@@ -133,7 +175,9 @@ enum _Step { ask, sent, signedIn }
 /// opens the user's mail app. Tapping the link in the email verifies it and deep links
 /// back here; the screen says "You're in" and moves on.
 class EmailScreen extends StatefulWidget {
-  const EmailScreen({super.key});
+  /// When set (the remembered address), the link is sent straight away.
+  const EmailScreen({super.key, this.email});
+  final String? email;
   @override
   State<EmailScreen> createState() => _EmailScreenState();
 }
@@ -160,6 +204,10 @@ class _EmailScreenState extends State<EmailScreen> {
   void initState() {
     super.initState();
     _email.addListener(() => setState(() {}));
+    if (widget.email case final e?) {
+      _email.text = e;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _send());
+    }
     _focus.addListener(() => setState(() {}));
     // The link comes back through supabase_flutter: a session on success, a stream error
     // (expired or already used) on failure.
@@ -204,12 +252,14 @@ class _EmailScreenState extends State<EmailScreen> {
     });
     try {
       await db.auth.signInWithOtp(email: _address, emailRedirectTo: 'wince://login-callback');
+      await _store.write(key: 'last_email', value: _address);
       if (!mounted) return;
       _focus.unfocus();
       setState(() => _step = _Step.sent);
       _startCooldown();
     } on AuthException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      debugPrint('$e');
+      if (mounted) setState(() => _error = _sendError(e));
     } catch (e) {
       debugPrint('$e');
       if (mounted) setState(() => _error = 'Something went wrong. Check your connection and try again.');
@@ -217,6 +267,14 @@ class _EmailScreenState extends State<EmailScreen> {
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  /// Supabase's own wording never reaches the screen.
+  static String _sendError(AuthException e) => switch (e.code) {
+        'over_email_send_rate_limit' || 'over_request_rate_limit' => 'Too many links sent. Wait a few minutes and try again.',
+        'email_address_invalid' => 'That email address doesn\'t look right.',
+        _ when e.statusCode == '429' => 'Too many links sent. Wait a few minutes and try again.',
+        _ => 'We couldn\'t send the link. Try again in a moment.',
+      };
 
   void _startCooldown() {
     _tick?.cancel();
@@ -592,16 +650,20 @@ class Pill extends StatefulWidget {
   const Pill({super.key, required this.onTap, required this.icon, required this.label})
     : background = Colors.white,
       foreground = Colors.black,
-      border = null;
-  Pill.quiet({super.key, required this.onTap, required this.icon, required this.label})
-    : background = Colors.white.withValues(alpha: 0.08),
+      border = null,
+      iconOnly = false;
+
+  /// [iconOnly] hides the label visually; it is still read out by screen readers.
+  Pill.quiet({super.key, required this.onTap, required this.icon, required this.label, this.iconOnly = false})
+    : background = Colors.transparent,
       foreground = kText,
-      border = Colors.white.withValues(alpha: 0.1);
+      border = Colors.white.withValues(alpha: 0.3);
   final VoidCallback? onTap;
   final Color background, foreground;
   final Color? border;
   final Widget icon;
   final String label;
+  final bool iconOnly;
   @override
   State<Pill> createState() => _PillState();
 }
@@ -639,8 +701,10 @@ class _PillState extends State<Pill> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     widget.icon,
-                    const SizedBox(width: 10),
-                    Text(widget.label, style: TextStyle(color: widget.foreground, fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: -0.2)),
+                    if (!widget.iconOnly) ...[
+                      const SizedBox(width: 10),
+                      Text(widget.label, style: TextStyle(color: widget.foreground, fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: -0.2)),
+                    ],
                   ],
                 ),
               ),
