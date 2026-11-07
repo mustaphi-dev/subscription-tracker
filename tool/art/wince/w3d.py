@@ -65,6 +65,8 @@ def ceramic(name, base, rough, coat=0.6):
     p = nt.nodes['Principled BSDF']
     p.inputs['Base Color'].default_value = (*base, 1)
     p.inputs['Roughness'].default_value = rough
+    # a quiet base layer, so the face stays black and the coat carries the glints
+    p.inputs['Specular IOR Level'].default_value = float(A.get('spec', 0.3))
     p.inputs['Coat Weight'].default_value = coat
     p.inputs['Coat Roughness'].default_value = 0.06
     # a faint stipple, like bead-blasted ceramic, so the face isn't CG-smooth
@@ -79,7 +81,7 @@ def ceramic(name, base, rough, coat=0.6):
     return m
 
 
-mat = ceramic('Face', (0.86, 0.86, 0.9), 0.32) if MAT == 'white' else ceramic('Face', (0.018, 0.016, 0.022), 0.28, coat=1.0)
+mat = ceramic('Face', (0.86, 0.86, 0.9), 0.32) if MAT == 'white' else ceramic('Face', (0.018, 0.016, 0.022), float(A.get('rough', 0.4)), coat=1.0)
 
 rig = empty('Rig')
 pieces = []
@@ -93,11 +95,13 @@ world_studio([(0.0, 0.0), (0.45, 0.004), (0.6, 0.02), (0.85, 0.06), (1.0, 0.1)],
 CAM = (0, -11.0, 0.35)
 softbox_card('Top', (-1.2, -1.0, 6.0), (0, 0, 0), (7, 2.4), 1.1)
 # a tall graded strip behind the camera, seen mirrored in the lacquered faces
-softbox_card('Front', (-2.6, -15.0, 3.0), (0, 0, 0), (2.2, 16), float(A.get('front', 0.5)))
-softbox_card('Key', (-6.0, -4.0, 2.5), (0, 0, 0), (1.2, 7), 1.6)
+softbox_card('Front', (-2.6, -15.0, 3.0), (0, 0, 0), (float(A.get('front_w', 2.2)), 16), float(A.get('front', 0.5)))
+softbox_card('Key', (-6.0, -4.0, 2.5), (0, 0, 0), (1.2, 7), float(A.get('key', 1.3)))
 softbox_card('RimR', (5.5, 2.0, 1.0), (0, 0, 0), (0.6, 7), 3.0, color=VIOLET)
 softbox_card('Under', (0.0, -2.0, -6.0), (0, 0, 0), (8, 3), 1.4, color=VIOLET)
-area('KeyL', (-4.5, -6.0, 4.5), (0, 0, 0), 900 if MAT == 'white' else 1400, size=(3, 3))
+# The key lamp lights the form but stays out of the lacquer, so it never flashes across
+# the face as a hard white square; the violet fill and back lamps still edge the bevels.
+area('KeyL', (-4.5, -6.0, 4.5), (0, 0, 0), 900 if MAT == 'white' else 1400, size=(3, 3)).visible_glossy = False
 area('Fill', (4.0, -6.0, -1.5), (0, 0, 0), 260, size=(4, 4), color=(0.6, 0.5, 1.0))
 area('Back', (0.0, 5.0, 2.0), (0, 0, 0), 1400, size=(5, 2), color=VIOLET)
 sc.view_settings.exposure = float(A.get('ev', -0.4 if MAT == 'white' else 0.0))

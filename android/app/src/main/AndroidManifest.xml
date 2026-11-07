@@ -27,6 +27,9 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- wince:// links are handled in Dart (app_links: the magic-link sign-in and the
+                 bank return), so the router must not also treat them as routes. -->
+            <meta-data android:name="flutter_deeplinking_enabled" android:value="false" />
             <!-- Open Banking OAuth return: wince://bank-connected -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
