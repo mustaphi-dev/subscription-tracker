@@ -10,7 +10,7 @@ usage:
 
 Frames shorter than --h are placed at the top and the rest is stage.
 """
-import argparse, glob, os
+import argparse, glob, os, sys
 import numpy as np
 from PIL import Image, ImageDraw
 from scipy.ndimage import gaussian_filter
@@ -25,6 +25,7 @@ ap.add_argument('--only', default=None)
 ap.add_argument('--bloom', type=float, default=0.4)
 ap.add_argument('--thr', type=float, default=0.6)
 ap.add_argument('--sat', type=float, default=1.0, help='chroma boost for the rendered object (AgX mutes saturated violets)')
+ap.add_argument('--dy', type=float, default=0.0, help='move the object down by this fraction of the frame height; the stage stays put')
 a = ap.parse_args()
 
 FLOOR = '#07080C'   # = kBg in lib/ui.dart; the page continues in this colour
@@ -127,6 +128,11 @@ for f in files:
     im = np.asarray(Image.open(f)).astype(np.float32)
     im /= 65535.0 if im.max() > 255 else 255.0
     fh, fw = im.shape[:2]
+    if a.dy:
+        s = round(a.dy * fh)
+        if im[fh - s:, :, 3].max() > 0:
+            print('warning: --dy pushes part of', os.path.basename(f), 'off the bottom', file=sys.stderr)
+        im = np.concatenate([np.zeros((s,) + im.shape[1:], im.dtype), im[:fh - s]])
     h = max(a.h, fh) if fw == a.w else round(a.h * fw / a.w)
     if (fw, h) not in cache:
         cache[(fw, h)] = stage(fw, h)
