@@ -4,6 +4,7 @@ import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -221,7 +222,7 @@ class TopBar extends ConsumerWidget {
                 onTap: () => showDraggableSheet(context, (scroll) => AlertsSheet(scroll: scroll)),
                 child: Padding(
                   padding: const EdgeInsets.all(8),
-                  child: Badge(isLabelVisible: alert, smallSize: 8, backgroundColor: kCrimson, child: const Icon(CupertinoIcons.bell)),
+                  child: Badge(isLabelVisible: alert, smallSize: 8, backgroundColor: kCrimson, child: const FaIcon(FontAwesomeIcons.bell, size: 20)),
                 ),
               ),
             ),
@@ -948,7 +949,7 @@ class _AddSheet extends StatelessWidget {
           showSheet(nav.context, const ManualItemForm());
         }),
         const SizedBox(height: 10),
-        option(CupertinoIcons.at, kMint, 'Forward emails', 'Trials, subscriptions and pay later', () {
+        option(FontAwesomeIcons.envelope.data, kMint, 'Forward emails', 'Trials, subscriptions and pay later', () {
           final router = GoRouter.of(context);
           Navigator.of(context).pop();
           router.push('/forwarding');

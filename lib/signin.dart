@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show AuthChangeEvent, AuthException, AuthState;
@@ -97,14 +98,14 @@ class _SignInState extends State<SignInScreen> {
                     _span(t, 0.5, 1),
                     Column(
                       children: [
-                        Pill(onTap: _google, icon: const _GoogleG(size: 20), label: 'Continue with Google'),
+                        Pill(onTap: _google, icon: const FaIcon(FontAwesomeIcons.google, size: 18), label: 'Continue with Google'),
                         const SizedBox(height: 12),
                         Pill.quiet(
                           onTap: () {
                             HapticFeedback.selectionClick();
                             context.push('/signin/email');
                           },
-                          icon: const Icon(Icons.mail_outline_rounded, size: 20),
+                          icon: const FaIcon(FontAwesomeIcons.envelope, size: 18),
                           label: 'Continue with email',
                         ),
                       ],
@@ -392,7 +393,7 @@ class _EmailScreenState extends State<EmailScreen> {
                 ),
         ),
         const SizedBox(height: 28),
-        Pill(onTap: _openMail, icon: const Icon(Icons.mail_rounded, size: 20), label: _app.action),
+        Pill(onTap: _openMail, icon: const FaIcon(FontAwesomeIcons.envelope, size: 18), label: _app.action),
         const SizedBox(height: 12),
         Pill.quiet(
           onTap: _wait > 0 || _busy ? null : _send,
@@ -649,40 +650,6 @@ class _PillState extends State<Pill> {
       ),
     );
   }
-}
-
-/// The four-colour Google "G", drawn as arcs so no image asset is needed.
-class _GoogleG extends StatelessWidget {
-  const _GoogleG({required this.size});
-  final double size;
-  @override
-  Widget build(BuildContext context) => CustomPaint(size: Size.square(size), painter: _GPainter());
-}
-
-class _GPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final s = size.width;
-    final stroke = s * 0.2;
-    final r = (s - stroke) / 2;
-    final c = Offset(s / 2, s / 2);
-    final rect = Rect.fromCircle(center: c, radius: r);
-    Paint p(Color color) => Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke;
-    double deg(double d) => d * math.pi / 180;
-    // Clockwise from the bar on the right: blue, green, yellow, red.
-    canvas.drawArc(rect, deg(-40), deg(40), false, p(const Color(0xFF4285F4)));
-    canvas.drawArc(rect, deg(0), deg(135), false, p(const Color(0xFF34A853)));
-    canvas.drawArc(rect, deg(135), deg(90), false, p(const Color(0xFFFBBC05)));
-    canvas.drawArc(rect, deg(225), deg(95), false, p(const Color(0xFFEA4335)));
-    // The crossbar.
-    canvas.drawRect(Rect.fromLTWH(s / 2, s / 2 - stroke / 2, r + stroke / 2, stroke), Paint()..color = const Color(0xFF4285F4));
-  }
-
-  @override
-  bool shouldRepaint(_GPainter oldDelegate) => false;
 }
 
 double _span(double t, double a, double b, [Curve curve = Curves.easeOutCubic]) => curve.transform(((t - a) / (b - a)).clamp(0.0, 1.0));
