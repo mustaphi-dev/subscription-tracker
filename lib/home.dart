@@ -6,7 +6,6 @@ import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
@@ -408,7 +407,7 @@ List<Widget> upcomingSlivers(BuildContext context, WidgetRef ref, List<Financial
             ]),
           ),
         ),
-        SliverToBoxAdapter(child: ItemGroup(e.value, sheet: controls != null).animate().fadeIn(duration: 300.ms).slideY(begin: 0.04, curve: springOut)),
+        SliverToBoxAdapter(child: ItemGroup(e.value, sheet: controls != null).fadeRise()),
       ],
       if (more)
         SliverToBoxAdapter(
@@ -893,7 +892,7 @@ class _EmptyState extends StatelessWidget {
             OutlinedButton(onPressed: () => showSheet(context, const ManualItemForm()), child: const Text('Add manually')),
           ]),
         ),
-      ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05, curve: springOut);
+      ).fadeRise(ms: 400, rise: 0.05);
 }
 
 // ───────── Add ─────────

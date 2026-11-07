@@ -1,4 +1,4 @@
-// One bank-data provider (TrueLayer, Enable Banking, GoCardless, later Mono…) behind a common shape,
+// One bank-data provider (TrueLayer today) behind a common shape,
 // so adding a country means adding a file here, not touching detection or the app.
 
 export type LinkStatus = "pending" | "linked" | "rejected" | "expired";

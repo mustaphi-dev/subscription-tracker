@@ -155,25 +155,31 @@ class _ProfileState extends ConsumerState<ProfileScreen> {
     }
   }
 
-  /// Verify the current PIN (or Face ID) first, then swap in the new-PIN screen.
-  void _changePin() => Navigator.of(context).push(MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (ctx) => LiquidGlassLockScreen(
-          title: 'Enter current PIN',
-          onCancel: () => Navigator.of(ctx).pop(),
-          onDone: () => Navigator.of(ctx).pushReplacement(MaterialPageRoute(
-            fullscreenDialog: true,
-            builder: (ctx2) => LiquidGlassLockScreen(
-              setup: true,
-              onCancel: () => Navigator.of(ctx2).pop(),
-              onDone: () {
-                Navigator.of(ctx2).pop();
-                showToast(context, 'PIN updated');
-              },
-            ),
-          )),
-        ),
-      ));
+  /// Verify the current PIN (or Face ID) first, then the new-PIN pad, in one screen.
+  void _changePin() {
+    var verified = false;
+    Navigator.of(context).push(MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, set) => verified
+            ? LiquidGlassLockScreen(
+                key: const ValueKey('new'),
+                setup: true,
+                onCancel: () => Navigator.of(ctx).pop(),
+                onDone: () {
+                  Navigator.of(ctx).pop();
+                  showToast(context, 'PIN updated');
+                },
+              )
+            : LiquidGlassLockScreen(
+                key: const ValueKey('current'),
+                title: 'Enter current PIN',
+                onCancel: () => Navigator.of(ctx).pop(),
+                onDone: () => set(() => verified = true),
+              ),
+      ),
+    ));
+  }
 }
 
 const kSupportEmail = 'hello@trywince.app';

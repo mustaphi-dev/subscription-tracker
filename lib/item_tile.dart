@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'brands.dart';
 import 'data.dart';
 import 'ui.dart';
 
@@ -257,23 +258,11 @@ class _ItemRowState extends ConsumerState<ItemRow> {
 
 /// The bank's site for [s]; iOS hands it to the bank's app when that app claims the link.
 String? bankAppUrl(PaymentSource? s) {
-  const banks = {
-    'revolut': 'https://revolut.com/app',
-    'wise': 'https://wise.com/account',
-    'lloyds': 'https://www.lloydsbank.com/app.html',
-    'paypal': 'https://www.paypal.com/myaccount/autopay',
-    'monzo': 'https://monzo.com',
-    'starling': 'https://www.starlingbank.com',
-    'barclays': 'https://www.barclays.co.uk',
-    'hsbc': 'https://www.hsbc.co.uk',
-    'natwest': 'https://www.natwest.com',
-    'santander': 'https://www.santander.co.uk',
-    'halifax': 'https://www.halifax.co.uk',
-    'nationwide': 'https://www.nationwide.co.uk',
-  };
   if (s == null) return null;
-  final who = '${s.provider} ${s.institution ?? ''}'.toLowerCase();
-  return banks.entries.where((b) => who.contains(b.key)).firstOrNull?.value;
+  final who = '${s.provider} ${s.institution ?? ''}';
+  const deep = {'revolut.com': 'https://revolut.com/app', 'wise.com': 'https://wise.com/account', 'lloydsbank.com': 'https://www.lloydsbank.com/app.html', 'paypal.com': 'https://www.paypal.com/myaccount/autopay'};
+  final domain = logoQuery(who)?.domain;
+  return domain == null ? null : deep[domain] ?? 'https://www.$domain';
 }
 
 /// Branded "are you sure" sheet. Marking cancelled only stops tracking, so the copy says so plainly.
@@ -281,39 +270,14 @@ Future<bool> confirmCancel(BuildContext context, FinancialItem i) async {
   final charge = i.isTrial
       ? (i.postTrialAmount == null ? null : priceTag(i.postTrialAmount!, i.currency, i.cycle))
       : priceTag(i.amount, i.currency, i.cycle);
-  final ok = await showSheet<bool>(
+  return confirmSheet(
     context,
-    Builder(
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          MerchantAvatar(i.merchant, size: 56),
-          const SizedBox(height: 16),
-          Text('Cancel ${i.merchant}?', textAlign: TextAlign.center, style: display(22)),
-          const SizedBox(height: 8),
-          Text(
-            'We\'ll stop tracking it and turn off its reminders. '
-            'This doesn\'t cancel it with ${i.merchant}${charge == null ? '.' : ', so make sure you have, or you\'ll still pay $charge.'}',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: kMuted, height: 1.4),
-          ),
-          const SizedBox(height: 24),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: kCrimson, foregroundColor: Colors.white),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Mark as cancelled'),
-          ),
-          const SizedBox(height: 4),
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: kText, minimumSize: const Size.fromHeight(48)),
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Keep it', style: TextStyle(fontWeight: FontWeight.w600)),
-          ),
-        ]),
-      ),
-    ),
+    leading: MerchantAvatar(i.merchant, size: 56),
+    title: 'Cancel ${i.merchant}?',
+    body: 'We\'ll stop tracking it and turn off its reminders. '
+        'This doesn\'t cancel it with ${i.merchant}${charge == null ? '.' : ', so make sure you have, or you\'ll still pay $charge.'}',
+    action: 'Mark as cancelled',
   );
-  return ok == true;
 }
 
 class _Tag extends StatelessWidget {

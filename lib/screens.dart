@@ -609,39 +609,16 @@ class _BankSheet extends StatelessWidget {
     final bank = accounts.first.bank;
     final manual = accounts.every((a) => a.isManual);
     Future<void> remove() async {
-      final ok = await showSheet<bool>(
+      final ok = await confirmSheet(
         context,
-        Builder(
-          builder: (ctx) => Padding(
-            padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Text(manual ? 'Remove $bank?' : 'Unlink $bank?', textAlign: TextAlign.center, style: display(22)),
-              const SizedBox(height: 8),
-              Text(
-                manual
-                    ? 'Its balance goes from your total. Subscriptions you track stay, without an account.'
-                    : 'We\'ll stop reading $bank and remove its ${accounts.length == 1 ? 'account' : '${accounts.length} accounts'} here. '
-                        'Subscriptions found from it stay. You can connect it again any time.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: kMuted, height: 1.4),
-              ),
-              const SizedBox(height: 24),
-              FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: kCrimson, foregroundColor: Colors.white),
-                onPressed: () => Navigator.pop(ctx, true),
-                child: Text(manual ? 'Remove' : 'Unlink'),
-              ),
-              const SizedBox(height: 4),
-              TextButton(
-                style: TextButton.styleFrom(foregroundColor: kText, minimumSize: const Size.fromHeight(48)),
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Keep it', style: TextStyle(fontWeight: FontWeight.w600)),
-              ),
-            ]),
-          ),
-        ),
+        title: manual ? 'Remove $bank?' : 'Unlink $bank?',
+        body: manual
+            ? 'Its balance goes from your total. Subscriptions you track stay, without an account.'
+            : 'We\'ll stop reading $bank and remove its ${accounts.length == 1 ? 'account' : '${accounts.length} accounts'} here. '
+                'Subscriptions found from it stay. You can connect it again any time.',
+        action: manual ? 'Remove' : 'Unlink',
       );
-      if (ok != true || !context.mounted) return;
+      if (!ok || !context.mounted) return;
       try {
         manual ? await removeAccounts(accounts.map((a) => a.id)) : await unlinkBank(bank);
         if (context.mounted) {

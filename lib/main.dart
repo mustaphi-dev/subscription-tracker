@@ -138,10 +138,22 @@ class _AppState extends ConsumerState<App> with WidgetsBindingObserver {
     }
   }
 
+  void _home() {
+    router.routerDelegate.navigatorKey.currentState?.popUntil((r) => r.isFirst);
+    router.go('/');
+    ref.read(tabProvider.notifier).set(0);
+  }
+
   @override
   Widget build(BuildContext context) {
     // The PIN is per sign-in: re-check after every auth change so a new user sets their own.
-    ref.listen(uidProvider, (_, _) => PinStore.hasPin().then((v) => mounted ? setState(() => _hasPin = v) : null));
+    ref.listen(uidProvider, (_, _) {
+      // The router already moves between sign-in and the app; this just drops the old tab.
+      ref.read(tabProvider.notifier).set(0);
+      PinStore.hasPin().then((v) => mounted ? setState(() => _hasPin = v) : null);
+    });
+    // Coming back through the lock (or a new sign-in) starts on Home, not wherever you left off.
+    ref.listen(lockProvider, (_, locked) => locked ? _home() : null);
     // Keep the home-screen widget in sync with live data.
     ref.listen(itemsProvider, (_, next) {
       final items = next.value;
