@@ -25,7 +25,6 @@ Widget _staged(Widget child) => Align(
   ),
 );
 
-/// The bare stage, filling its parent.
 class StagePlate extends StatelessWidget {
   const StagePlate({super.key});
   @override
@@ -35,7 +34,6 @@ class StagePlate extends StatelessWidget {
   );
 }
 
-/// A seamless, muted loop for a scene on the stage.
 VideoPlayerController stageVideo(String asset, {bool play = true}) {
   final v = VideoPlayerController.asset(asset, videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true));
   v
@@ -102,3 +100,57 @@ class StageScene extends StatelessWidget {
           ),
         );
 }
+
+/// A [StageScene] that owns its loop: made once reduced motion is known (a still when it's on), disposed with it.
+class LoopScene extends StatefulWidget {
+  const LoopScene({super.key, required this.still, required this.video});
+  final String still, video;
+  @override
+  State<LoopScene> createState() => _LoopSceneState();
+}
+
+class _LoopSceneState extends State<LoopScene> {
+  VideoPlayerController? _video;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _video ??= stageVideo(widget.video, play: !MediaQuery.disableAnimationsOf(context));
+  }
+
+  @override
+  void dispose() {
+    _video?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => StageScene(still: widget.still, video: _video);
+}
+
+/// Fades the bottom of the stage into [kBg], from [from] to [to] down the screen, so the type reads.
+class StageScrim extends StatelessWidget {
+  const StageScrim({super.key, this.from = 0.45, this.to = 0.68, this.alpha = 0.75});
+  final double from, to, alpha;
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [kBg.withValues(alpha: 0), kBg.withValues(alpha: 0), kBg.withValues(alpha: alpha), kBg],
+          stops: [0, from, to, 1],
+        ),
+      ),
+    ),
+  );
+}
+
+double span(double t, double a, double b, [Curve curve = Curves.easeOutCubic]) => curve.transform(((t - a) / (b - a)).clamp(0.0, 1.0));
+
+/// Fade + rise driven by [r] (0 hidden, 1 in place).
+Widget rise(double r, Widget child, {double dy = 16}) => Opacity(
+  opacity: r.clamp(0.0, 1.0),
+  child: Transform.translate(offset: Offset(0, (1 - r) * dy), child: child),
+);

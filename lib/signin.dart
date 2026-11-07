@@ -1,18 +1,17 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show AuthChangeEvent, AuthException, AuthState;
-import 'package:url_launcher/url_launcher.dart';
-import 'package:video_player/video_player.dart';
 
 import 'brand_mark.dart';
 import 'data.dart';
+import 'legal.dart';
 import 'mail_apps.dart';
 import 'stage.dart';
 import 'ui.dart';
@@ -25,14 +24,16 @@ import 'ui.dart';
 // (or whichever app the address points to). The link in the email verifies and deep
 // links back to wince://login-callback, where supabase_flutter finishes signing in.
 
-const kPrivacyUrl = 'https://mustaphi-dev.github.io/subscription-tracker/privacy.html';
-const kTermsUrl = 'https://mustaphi-dev.github.io/subscription-tracker/terms.html';
-const _heroStill = 'assets/onboarding/signin.jpg';
-const _heroVideo = 'assets/onboarding/signin.mp4';
+const _hero = LoopScene(still: 'assets/onboarding/signin.jpg', video: 'assets/onboarding/signin.mp4');
 
 /// The last address a link was sent to, kept on the phone through sign-out so coming back is one tap.
-const _store = FlutterSecureStorage();
-Future<String?> _lastEmail() => _store.read(key: 'last_email');
+Future<String?> _lastEmail() => storage.read(key: 'last_email');
+
+const _tooMany = 'Too many links sent. Wait a few minutes and try again.';
+
+/// One-off info line from the sign-in screens.
+void _note(BuildContext context, String message) =>
+    showToast(context, message, icon: CupertinoIcons.info_circle, tone: kAmber, closeSheets: false);
 
 /// adams…@gmail.com: enough to recognise, short enough for a button.
 String shortEmail(String email) {
@@ -47,7 +48,6 @@ class SignInScreen extends StatefulWidget {
 }
 
 class _SignInState extends State<SignInScreen> {
-  VideoPlayerController? _video;
   String? _last;
 
   @override
@@ -56,30 +56,10 @@ class _SignInState extends State<SignInScreen> {
     _lastEmail().then((v) => mounted ? setState(() => _last = v) : null);
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _video ??= stageVideo(_heroVideo, play: !MediaQuery.disableAnimationsOf(context));
-  }
-
-  @override
-  void dispose() {
-    _video?.dispose();
-    super.dispose();
-  }
-
   void _soon(String provider) {
     // UI only for now; Google and Apple get wired up with Supabase OAuth later.
     HapticFeedback.selectionClick();
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: kSurfaceHi,
-          content: Text('$provider sign-in is coming soon. Use email for now.', style: const TextStyle(color: kText)),
-        ),
-      );
+    _note(context, '$provider sign-in is coming soon. Use email for now.');
   }
 
   @override
@@ -93,27 +73,27 @@ class _SignInState extends State<SignInScreen> {
         children: [
           const StagePlate(),
           Opacity(
-            opacity: _span(t, 0, 0.5),
-            child: Transform.scale(scale: 1.03 - 0.03 * _span(t, 0, 1), child: StageScene(still: _heroStill, video: _video)),
+            opacity: span(t, 0, 0.5),
+            child: Transform.scale(scale: 1.03 - 0.03 * span(t, 0, 1), child: _hero),
           ),
-          const _Scrim(),
+          const StageScrim(),
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Column(
                 children: [
                   const SizedBox(height: 14),
-                  _rise(_span(t, 0.15, 0.6), const Masthead()),
+                  rise(span(t, 0.15, 0.6), const Masthead()),
                   const Spacer(),
-                  _rise(_span(t, 0.3, 0.8), const _Headline('Never wince\nagain.'), dy: 22),
+                  rise(span(t, 0.3, 0.8), const _Headline('Never wince\nagain.'), dy: 22),
                   const SizedBox(height: 14),
-                  _rise(
-                    _span(t, 0.4, 0.9),
+                  rise(
+                    span(t, 0.4, 0.9),
                     const _Body('Every subscription and free trial, watched.\nWe warn you before one takes a penny.'),
                   ),
                   const SizedBox(height: 30),
-                  _rise(
-                    _span(t, 0.5, 1),
+                  rise(
+                    span(t, 0.5, 1),
                     Column(
                       children: [
                         Pill(
@@ -155,7 +135,7 @@ class _SignInState extends State<SignInScreen> {
                     dy: 20,
                   ),
                   const SizedBox(height: 26),
-                  Opacity(opacity: _span(t, 0.6, 1), child: const LegalLinks()),
+                  Opacity(opacity: span(t, 0.6, 1), child: const LegalLinks()),
                   const SizedBox(height: 12),
                 ],
               ),
@@ -189,7 +169,6 @@ class _EmailScreenState extends State<EmailScreen> {
   final _email = TextEditingController();
   final _focus = FocusNode();
   late final StreamSubscription<AuthState> _auth;
-  VideoPlayerController? _video;
   Timer? _tick;
   _Step _step = _Step.ask;
   bool _busy = false;
@@ -228,16 +207,9 @@ class _EmailScreenState extends State<EmailScreen> {
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _video ??= stageVideo(_heroVideo, play: !MediaQuery.disableAnimationsOf(context));
-  }
-
-  @override
   void dispose() {
     _auth.cancel();
     _tick?.cancel();
-    _video?.dispose();
     _email.dispose();
     _focus.dispose();
     super.dispose();
@@ -252,7 +224,7 @@ class _EmailScreenState extends State<EmailScreen> {
     });
     try {
       await db.auth.signInWithOtp(email: _address, emailRedirectTo: 'wince://login-callback');
-      await _store.write(key: 'last_email', value: _address);
+      await storage.write(key: 'last_email', value: _address);
       if (!mounted) return;
       _focus.unfocus();
       setState(() => _step = _Step.sent);
@@ -270,9 +242,9 @@ class _EmailScreenState extends State<EmailScreen> {
 
   /// Supabase's own wording never reaches the screen.
   static String _sendError(AuthException e) => switch (e.code) {
-        'over_email_send_rate_limit' || 'over_request_rate_limit' => 'Too many links sent. Wait a few minutes and try again.',
+        'over_email_send_rate_limit' || 'over_request_rate_limit' => _tooMany,
         'email_address_invalid' => 'That email address doesn\'t look right.',
-        _ when e.statusCode == '429' => 'Too many links sent. Wait a few minutes and try again.',
+        _ when e.statusCode == '429' => _tooMany,
         _ => 'We couldn\'t send the link. Try again in a moment.',
       };
 
@@ -289,17 +261,7 @@ class _EmailScreenState extends State<EmailScreen> {
   Future<void> _openMail() async {
     HapticFeedback.selectionClick();
     final opened = await openMailApp(_app);
-    if (!opened && mounted) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: kSurfaceHi,
-            content: Text('Open your email app and tap the link from Wince.', style: TextStyle(color: kText)),
-          ),
-        );
-    }
+    if (!opened && mounted) _note(context, 'Open your email app and tap the link from Wince.');
   }
 
   void _signedIn() {
@@ -335,13 +297,12 @@ class _EmailScreenState extends State<EmailScreen> {
         fit: StackFit.expand,
         children: [
           const StagePlate(),
-          // The W comes back once the link is on its way.
           AnimatedOpacity(
             opacity: _step == _Step.ask ? 0 : 1,
             duration: const Duration(milliseconds: 500),
-            child: StageScene(still: _heroStill, video: _video),
+            child: _hero,
           ),
-          const _Scrim(),
+          const StageScrim(),
           SafeArea(
             child: Column(
               children: [
@@ -387,6 +348,19 @@ class _EmailScreenState extends State<EmailScreen> {
     ),
   );
 
+  /// [_error] under the field or text above it, [top] apart; the space closes when there's none.
+  Widget _errorLine(double top) => AnimatedSize(
+    duration: const Duration(milliseconds: 220),
+    child: _error == null
+        ? const SizedBox(width: double.infinity)
+        : Padding(
+            padding: EdgeInsets.only(top: top),
+            child: Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: kCrimson, fontSize: 13.5)),
+          ),
+  );
+
+  static Widget _spinner(Color color) => SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2, color: color));
+
   Widget _askView() => Padding(
     key: const ValueKey('ask'),
     padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -398,21 +372,11 @@ class _EmailScreenState extends State<EmailScreen> {
         const _Body("We'll send you a link. Tap it and you're in,\nno password to remember."),
         const SizedBox(height: 28),
         _EmailField(controller: _email, focus: _focus, error: _error != null, onSubmit: _send),
-        AnimatedSize(
-          duration: const Duration(milliseconds: 220),
-          child: _error == null
-              ? const SizedBox(width: double.infinity)
-              : Padding(
-                  padding: const EdgeInsets.only(top: 10),
-                  child: Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: kCrimson, fontSize: 13.5)),
-                ),
-        ),
+        _errorLine(10),
         const SizedBox(height: 16),
         Pill(
           onTap: _valid && !_busy ? _send : null,
-          icon: _busy
-              ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-              : const Icon(Icons.arrow_forward_rounded, size: 20),
+          icon: _busy ? _spinner(Colors.black) : const Icon(Icons.arrow_forward_rounded, size: 20),
           label: _busy ? 'Sending link' : 'Send link',
         ),
         const SizedBox(height: 16),
@@ -441,23 +405,13 @@ class _EmailScreenState extends State<EmailScreen> {
           textAlign: TextAlign.center,
           style: _Body.style,
         ),
-        AnimatedSize(
-          duration: const Duration(milliseconds: 220),
-          child: _error == null
-              ? const SizedBox(width: double.infinity)
-              : Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: kCrimson, fontSize: 13.5)),
-                ),
-        ),
+        _errorLine(12),
         const SizedBox(height: 28),
         Pill(onTap: _openMail, icon: const FaIcon(FontAwesomeIcons.envelope, size: 18), label: _app.action),
         const SizedBox(height: 12),
         Pill.quiet(
           onTap: _wait > 0 || _busy ? null : _send,
-          icon: _busy
-              ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2, color: kText))
-              : const Icon(Icons.refresh_rounded, size: 20),
+          icon: _busy ? _spinner(kText) : const Icon(Icons.refresh_rounded, size: 20),
           label: _wait > 0 ? 'Resend in 0:${_wait.toString().padLeft(2, '0')}' : 'Resend link',
         ),
         const SizedBox(height: 6),
@@ -519,24 +473,6 @@ class _Body extends StatelessWidget {
   Widget build(BuildContext context) => Text(text, textAlign: TextAlign.center, style: style);
 }
 
-/// Darkens the bottom of the stage so the type and buttons always read.
-class _Scrim extends StatelessWidget {
-  const _Scrim();
-  @override
-  Widget build(BuildContext context) => IgnorePointer(
-    child: DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [kBg.withValues(alpha: 0), kBg.withValues(alpha: 0), kBg.withValues(alpha: 0.75), kBg],
-          stops: const [0, 0.45, 0.68, 1],
-        ),
-      ),
-    ),
-  );
-}
-
 class _EmailField extends StatelessWidget {
   const _EmailField({required this.controller, required this.focus, required this.error, required this.onSubmit});
   final TextEditingController controller;
@@ -581,7 +517,6 @@ class _EmailField extends StatelessWidget {
   );
 }
 
-/// "By continuing, you agree to the Terms and Privacy Policy", with both as links.
 class _Agreement extends StatefulWidget {
   const _Agreement();
   @override
@@ -589,8 +524,8 @@ class _Agreement extends StatefulWidget {
 }
 
 class _AgreementState extends State<_Agreement> {
-  late final _terms = TapGestureRecognizer()..onTap = () => _openLegal(kTermsUrl);
-  late final _privacy = TapGestureRecognizer()..onTap = () => _openLegal(kPrivacyUrl);
+  late final _terms = TapGestureRecognizer()..onTap = () => openLegal(kTermsUrl);
+  late final _privacy = TapGestureRecognizer()..onTap = () => openLegal(kPrivacyUrl);
 
   @override
   void dispose() {
@@ -616,32 +551,6 @@ class _AgreementState extends State<_Agreement> {
       style: TextStyle(color: kText.withValues(alpha: 0.45), fontSize: 12.5, height: 1.4),
     );
   }
-}
-
-void _openLegal(String url) => launchUrl(Uri.parse(url), mode: LaunchMode.inAppBrowserView);
-
-/// Privacy Policy · Terms of Service, opening the GitHub Pages copies.
-class LegalLinks extends StatelessWidget {
-  const LegalLinks({super.key});
-
-  Widget _link(String text, String url) => GestureDetector(
-    behavior: HitTestBehavior.opaque,
-    onTap: () => _openLegal(url),
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-      child: Text(text, style: TextStyle(color: kText.withValues(alpha: 0.72), fontSize: 14, fontWeight: FontWeight.w500)),
-    ),
-  );
-
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisAlignment: MainAxisAlignment.center,
-    children: [
-      _link('Privacy Policy', kPrivacyUrl),
-      Container(width: 3, height: 3, margin: const EdgeInsets.symmetric(horizontal: 6), decoration: const BoxDecoration(color: kFaint, shape: BoxShape.circle)),
-      _link('Terms of Service', kTermsUrl),
-    ],
-  );
 }
 
 /// Full-width stadium button with an icon before the label; presses down slightly.
@@ -715,10 +624,3 @@ class _PillState extends State<Pill> {
     );
   }
 }
-
-double _span(double t, double a, double b, [Curve curve = Curves.easeOutCubic]) => curve.transform(((t - a) / (b - a)).clamp(0.0, 1.0));
-
-Widget _rise(double r, Widget child, {double dy = 16}) => Opacity(
-  opacity: r.clamp(0.0, 1.0),
-  child: Transform.translate(offset: Offset(0, (1 - r) * dy), child: child),
-);

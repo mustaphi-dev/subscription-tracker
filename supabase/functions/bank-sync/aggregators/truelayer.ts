@@ -16,6 +16,7 @@ let store: TokenStore = dbTokens;
 export const useTokenStore = (s: TokenStore) => (store = s);
 
 class Expired extends Error {}
+class NotSupported extends Error {}
 
 async function tokenRequest(form: Record<string, string>): Promise<Tokens> {
   const res = await fetch(`${AUTH()}/connect/token`, {
@@ -30,7 +31,6 @@ async function tokenRequest(form: Record<string, string>): Promise<Tokens> {
   return { access: body.access_token, refresh: body.refresh_token ?? null, expiresAt: Date.now() + body.expires_in * 1000 };
 }
 
-/** A live access token for [id], refreshing (and re-storing) it when it's about to lapse. */
 async function accessToken(id: string): Promise<string> {
   const t = await store.get(id);
   if (!t) throw new Expired("no tokens stored");
@@ -44,6 +44,7 @@ async function accessToken(id: string): Promise<string> {
 async function data(id: string, path: string) {
   const res = await fetch(`${API()}/data/v1${path}`, { headers: { authorization: `Bearer ${await accessToken(id)}` } });
   if (res.status === 401) throw new Expired(`data ${path} 401`);
+  if (res.status === 501) throw new NotSupported(`data ${path} 501`);
   if (!res.ok) throw new Error(`truelayer ${path.split("?")[0]} ${res.status}: ${await res.text()}`);
   return (await res.json()).results ?? [];
 }
@@ -60,7 +61,6 @@ function accountList(id: string) {
   return list;
 }
 
-// Bank list per country, cached an hour per function instance.
 const providers = new Map<string, { at: number; list: { id: string; name: string; logo?: string }[] }>();
 async function providerList(country: string) {
   if (sandbox()) return [{ id: "mock", name: "Mock Bank" }];
@@ -116,14 +116,11 @@ export const trueLayer: Aggregator = {
     return { externalId: reference, link: `${AUTH()}/?${q}` };
   },
 
-  async completeLink(externalId, query) {
+  async completeLink(externalId, query, redirect) {
     const code = query.get("code");
     if (query.get("error") || !code) return { externalId, status: "rejected" };
     try {
-      const t = await tokenRequest({
-        grant_type: "authorization_code", code,
-        redirect_uri: `${env("SUPABASE_URL")}/functions/v1/bank-sync/callback`,
-      });
+      const t = await tokenRequest({ grant_type: "authorization_code", code, redirect_uri: redirect });
       await store.put(externalId, t);
       return { externalId, status: "linked" };
     } catch (e) {
@@ -154,7 +151,10 @@ export const trueLayer: Aggregator = {
       data(consent, `/accounts/${id}/balance`),
       data(consent, `/accounts/${id}/transactions?from=${from}&to=${to}`),
       // Some banks don't support pending transactions; treat that as none.
-      data(consent, `/accounts/${id}/transactions/pending`).catch(() => []),
+      data(consent, `/accounts/${id}/transactions/pending`).catch((e) => {
+        if (e instanceof NotSupported) return [];
+        throw e;
+      }),
     ]);
     const acc = accounts.find((a: any) => a.account_id === id) ?? {};
     const bal = balances[0] ?? {};

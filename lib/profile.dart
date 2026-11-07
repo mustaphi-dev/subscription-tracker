@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,27 +5,25 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'avatars.dart';
 import 'country.dart';
+import 'currency.dart';
 import 'data.dart';
+import 'export.dart';
+import 'legal.dart';
 import 'lock.dart';
-import 'signin.dart' show kPrivacyUrl, kTermsUrl;
 import 'ui.dart';
 
-class ProfileScreen extends ConsumerStatefulWidget {
+class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
-  @override
-  ConsumerState<ProfileScreen> createState() => _ProfileState();
-}
 
-class _ProfileState extends ConsumerState<ProfileScreen> {
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final user = db.auth.currentUser;
-    final base = ref.watch(baseCurrencyProvider).value ?? 'GBP';
-    final country = ref.watch(countryProvider).value;
+    final base = ref.watch(baseProvider);
+    final country = ref.watch(profileProvider).value?.country;
     final name = user?.userMetadata?['full_name'] as String?;
 
     // Tall, borderless, translucent rows packed tight; the page gradient shows through them.
@@ -112,9 +108,9 @@ class _ProfileState extends ConsumerState<ProfileScreen> {
               row(CupertinoIcons.globe, 'Country',
                   () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => CountryScreen(current: country ?? '')))),
               row(CupertinoIcons.envelope, 'Email forwarding', () => context.push('/forwarding')),
-              row(CupertinoIcons.lock, 'Security', () => showSheet(context, _Security(onChangePin: _changePin))),
+              row(CupertinoIcons.lock, 'Security', () => showSheet(context, const _Security())),
               gap,
-              row(FontAwesomeIcons.shareFromSquare.data, 'Export data', () => showSheet(context, _Export(onPick: _export))),
+              row(FontAwesomeIcons.shareFromSquare.data, 'Export data', () => showSheet(context, const ExportSheet())),
               gap,
               row(CupertinoIcons.chat_bubble, 'Support', () => launchUrl(Uri.parse('mailto:$kSupportEmail?subject=Wince%20support'))),
               row(CupertinoIcons.info, 'About', () => showSheet(context, const _About())),
@@ -135,59 +131,11 @@ class _ProfileState extends ConsumerState<ProfileScreen> {
       ),
     );
   }
-
-  /// Everything tracked, as a CSV or Excel file through the share sheet (Files, Mail, Numbers…).
-  Future<void> _export(bool excel) async {
-    Navigator.of(context).pop();
-    try {
-      final rows = await db.from('financial_items').select().order('created_at');
-      final items = rows.map(FinancialItem.new).toList();
-      final name = 'wince-${DateFormat('y-MM-dd').format(DateTime.now())}.${excel ? 'xlsx' : 'csv'}';
-      await SharePlus.instance.share(ShareParams(
-        files: [
-          XFile.fromData(Uint8List.fromList(excel ? itemsXlsx(items) : utf8.encode(itemsCsv(items))),
-              mimeType: excel ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'text/csv'),
-        ],
-        fileNameOverrides: [name],
-      ));
-    } catch (e) {
-      if (mounted) showError(context, 'Couldn\'t export your data. Try again in a moment.', e);
-    }
-  }
-
-  /// Verify the current PIN (or Face ID) first, then the new-PIN pad, in one screen.
-  void _changePin() {
-    var verified = false;
-    Navigator.of(context).push(MaterialPageRoute(
-      fullscreenDialog: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, set) => verified
-            ? LiquidGlassLockScreen(
-                key: const ValueKey('new'),
-                setup: true,
-                onCancel: () => Navigator.of(ctx).pop(),
-                onDone: () {
-                  Navigator.of(ctx).pop();
-                  showToast(context, 'PIN updated');
-                },
-              )
-            : LiquidGlassLockScreen(
-                key: const ValueKey('current'),
-                title: 'Enter current PIN',
-                onCancel: () => Navigator.of(ctx).pop(),
-                onDone: () => set(() => verified = true),
-              ),
-      ),
-    ));
-  }
 }
-
-const kSupportEmail = 'hello@trywince.app';
 
 /// Face ID and the PIN, in one sheet so the profile stays a plain list.
 class _Security extends StatefulWidget {
-  const _Security({required this.onChangePin});
-  final VoidCallback onChangePin;
+  const _Security();
   @override
   State<_Security> createState() => _SecurityState();
 }
@@ -217,7 +165,6 @@ class _SecurityState extends State<_Security> {
                   HapticFeedback.selectionClick();
                   setState(() => _bio = v);
                   await PinStore.setBiometric(v);
-                  await db.from('profiles').update({'biometric_enabled': v}).eq('id', db.auth.currentUser!.id);
                 },
               ),
             ]),
@@ -225,10 +172,7 @@ class _SecurityState extends State<_Security> {
           const Divider(height: 1, color: kLine),
           Pressable(
             scale: 0.99,
-            onTap: () {
-              Navigator.of(context).pop();
-              widget.onChangePin();
-            },
+            onTap: () => changePin(closeSheet(context)),
             child: const SizedBox(
               height: 56,
               child: Row(children: [
@@ -241,46 +185,6 @@ class _SecurityState extends State<_Security> {
           Text('The app locks ${lockTimeout.inMinutes} minutes after you leave it.', style: caption),
         ]),
       );
-}
-
-/// Pick a file format for the export.
-class _Export extends StatelessWidget {
-  const _Export({required this.onPick});
-  final ValueChanged<bool> onPick; // true = Excel
-
-  @override
-  Widget build(BuildContext context) {
-    Widget option(FaIconData icon, String title, String sub, bool excel) => Pressable(
-          scale: 0.99,
-          onTap: () => onPick(excel),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            child: Row(children: [
-              FaIcon(icon, size: 24, color: kText),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-                  Text(sub, style: caption),
-                ]),
-              ),
-              const Icon(CupertinoIcons.chevron_right, size: 16, color: kFaint),
-            ]),
-          ),
-        );
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Export data', style: display(22)),
-        const SizedBox(height: 4),
-        const Text('Everything you track, including cancelled items.', style: TextStyle(color: kMuted)),
-        const SizedBox(height: 8),
-        option(FontAwesomeIcons.fileLines, 'CSV', 'Open with Numbers and Google Sheets', false),
-        const Divider(height: 1, color: kLine),
-        option(FontAwesomeIcons.fileExcel, 'Excel', 'An .xlsx workbook for Microsoft Excel', true),
-      ]),
-    );
-  }
 }
 
 /// The app, in one sheet: what it is, and where the legal pages live.
@@ -299,7 +203,6 @@ class _About extends StatelessWidget {
             ]),
           ),
         );
-    void open(String url) => launchUrl(Uri.parse(url), mode: LaunchMode.inAppBrowserView);
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -310,9 +213,9 @@ class _About extends StatelessWidget {
         const Text('Catch trials and renewals before they catch you.', textAlign: TextAlign.center, style: TextStyle(color: kMuted)),
         const SizedBox(height: 20),
         const Divider(height: 1, color: kLine),
-        link('Privacy Policy', () => open(kPrivacyUrl)),
+        link('Privacy Policy', () => openLegal(kPrivacyUrl)),
         const Divider(height: 1, color: kLine),
-        link('Terms of Service', () => open(kTermsUrl)),
+        link('Terms of Service', () => openLegal(kTermsUrl)),
       ]),
     );
   }

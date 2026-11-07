@@ -1,6 +1,7 @@
 import 'package:excel/excel.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wince/data.dart';
+import 'package:wince/export.dart';
 
 void main() {
   test('itemsCsv quotes awkward fields and formats dates', () {

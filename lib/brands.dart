@@ -1,6 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import 'data.dart';
+
 /// Merchant and bank logos from logo.dev, cached on disk after the first load.
 ///
 /// Pass the publishable key at build time: `--dart-define=LOGO_DEV_KEY=pk_...`
@@ -8,10 +10,48 @@ import 'package:flutter/material.dart';
 /// doesn't exist or can't load, callers get their own letter-tile fallback.
 const _key = String.fromEnvironment('LOGO_DEV_KEY');
 
+/// Banks the app knows by name: the key the server stores as `provider`, brand colour, logo
+/// domain and the page their app claims. The first four are offered one-tap on Accounts.
+typedef Bank = ({String key, String label, Color color, List<String> aliases, String domain, String app});
+
+const banks = <Bank>[
+  (key: 'revolut', label: 'Revolut', color: Color(0xFF3D7BFF), aliases: [], domain: 'revolut.com', app: 'https://revolut.com/app'),
+  (key: 'wise', label: 'Wise', color: Color(0xFF9FE870), aliases: ['transferwise'], domain: 'wise.com', app: 'https://wise.com/account'),
+  (key: 'lloyds', label: 'Lloyds', color: Color(0xFF00A56A), aliases: [], domain: 'lloydsbank.com', app: 'https://www.lloydsbank.com/app.html'),
+  (key: 'paypal', label: 'PayPal', color: Color(0xFF6C63FF), aliases: [], domain: 'paypal.com', app: 'https://www.paypal.com/myaccount/autopay'),
+];
+
+/// The known bank whose key appears in [name] ("Lloyds Bank" → Lloyds).
+Bank? bankNamed(String name) {
+  final n = name.toLowerCase();
+  return banks.where((b) => n.contains(b.key)).firstOrNull;
+}
+
+/// A stable colour for anything without a brand colour, from its name.
+Color nameColor(String name, [double saturation = 0.55, double lightness = 0.6]) =>
+    HSLColor.fromAHSL(1, (name.toLowerCase().hashCode % 360).abs().toDouble(), saturation, lightness).toColor();
+
+/// A bank's brand colour if the app knows it, otherwise a stable colour from its name.
+Color bankColor(String bank) => bankNamed(bank)?.color ?? nameColor(bank);
+
+extension SourceLook on PaymentSource {
+  /// Bank name to show: the provider's, or whatever the user typed for other banks.
+  String get bank => banks.where((b) => b.key == provider).firstOrNull?.label ?? institution ?? 'Bank';
+  Color get color => bankColor(bank);
+}
+
+/// The bank's site for [s]; iOS hands it to the bank's app when that app claims the link.
+String? bankAppUrl(PaymentSource? s) {
+  if (s == null) return null;
+  final domain = logoQuery('${s.provider} ${s.institution ?? ''}')?.domain;
+  if (domain == null) return null;
+  return banks.where((b) => b.domain == domain).firstOrNull?.app ?? 'https://www.$domain';
+}
+
 /// Exact domains for brands whose names arrive messy from bank feeds and receipts
 /// ("AMZN Mktp", "APPLE.COM/BILL", "UBER *EATS") or are ambiguous on their own ("Sky", "Three").
 /// Order matters: specific before generic. Aliases are lowercase with spaces and punctuation removed.
-const _domains = <(List<String>, String)>[
+final _domains = <(List<String>, String)>[
   // Streaming & media
   (['youtubemusic', 'youtubepremium', 'youtube'], 'youtube.com'),
   (['netflix'], 'netflix.com'),
@@ -64,11 +104,9 @@ const _domains = <(List<String>, String)>[
   (['clearpay'], 'clearpay.co.uk'),
   (['afterpay'], 'afterpay.com'),
   // Banks & payments
-  (['revolut'], 'revolut.com'),
-  (['wise', 'transferwise'], 'wise.com'),
+  for (final b in banks) ([b.key, ...b.aliases], b.domain),
   (['monzo'], 'monzo.com'),
   (['starling'], 'starlingbank.com'),
-  (['lloyds'], 'lloydsbank.com'),
   (['barclays', 'barclaycard'], 'barclays.co.uk'),
   (['hsbc'], 'hsbc.co.uk'),
   (['natwest'], 'natwest.com'),
@@ -77,7 +115,6 @@ const _domains = <(List<String>, String)>[
   (['nationwide'], 'nationwide.co.uk'),
   (['chase'], 'chase.co.uk'),
   (['amex', 'americanexpress'], 'americanexpress.com'),
-  (['paypal'], 'paypal.com'),
   (['n26'], 'n26.com'),
   (['gcb'], 'gcbbank.com.gh'),
   (['ecobank'], 'ecobank.com'),

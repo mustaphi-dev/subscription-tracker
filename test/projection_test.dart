@@ -41,4 +41,23 @@ void main() {
     expect(c.singleWhere((e) => e.item.merchant == 'Pay').amount, 2000);
     expect(c.where((e) => e.item.merchant == 'Yearly').length, 1);
   });
+
+  test('final installment follows the cycle, weekly or monthly', () {
+    DateTime? last(String cycle) => item({'merchant_name': 'Pay in 4', 'item_type': 'installment', 'billing_cycle': cycle,
+      'next_renewal_date': '2026-01-31', 'installment_total_count': 4, 'installment_paid_count': 1}).finalPayment;
+    expect(last('weekly'), DateTime(2026, 2, 14));
+    expect(last('monthly'), DateTime(2026, 3, 31));
+  });
+
+  test('monthly equivalent and totals count only what is still live', () {
+    final items = [
+      item({'merchant_name': 'Weekly', 'item_type': 'subscription', 'gbp_equivalent_amount': 12, 'billing_cycle': 'weekly'}),
+      item({'merchant_name': 'Trial', 'item_type': 'free_trial', 'gbp_equivalent_amount': 6, 'status': 'pending_confirmation'}),
+      item({'merchant_name': 'Pay', 'item_type': 'income', 'gbp_equivalent_amount': 2000}),
+      item({'merchant_name': 'Old', 'item_type': 'subscription', 'gbp_equivalent_amount': 99, 'status': 'paused'}),
+    ];
+    final live = items.where((i) => i.isLive);
+    expect(live.monthlyOut, closeTo(12 * 52 / 12 + 6, 1e-9));
+    expect(live.monthlyIn, 2000);
+  });
 }

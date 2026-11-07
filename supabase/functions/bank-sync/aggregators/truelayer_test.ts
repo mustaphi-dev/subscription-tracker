@@ -1,8 +1,6 @@
-// deno test --allow-env supabase/functions/bank-sync/aggregators/truelayer_test.ts
-import { assertEquals } from "jsr:@std/assert@1.0.13";
+// deno test --allow-env supabase/functions/bank-sync/
+import { assertEquals, assertRejects } from "jsr:@std/assert@1.0.13";
 
-Deno.env.set("SUPABASE_URL", "http://localhost");
-Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "test");
 Deno.env.set("TRUELAYER_CLIENT_ID", "cid");
 Deno.env.set("TRUELAYER_CLIENT_SECRET", "secret");
 Deno.env.set("BANK_TOKEN_KEY", btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))));
@@ -40,18 +38,14 @@ Deno.test("tokens round-trip through AES-GCM and differ each time", async () => 
   assertEquals(await open(a), t);
 });
 
-Deno.test("sandbox: Mock Bank only, auth link targets the mock provider", async () => {
+Deno.test("sandbox: auth link goes to the sandbox, keyed by our reference", async () => {
   Deno.env.set("TRUELAYER_ENV", "sandbox");
   try {
-    assertEquals(await trueLayer.listBanks("GB"), [{ name: "Mock Bank", logo: undefined }]);
     const { externalId, link } = await trueLayer.createLink({ bank: "Mock Bank", country: "GB", reference: "ref-1", redirect: "https://x/cb" });
     const u = new URL(link);
     assertEquals(externalId, "ref-1");
     assertEquals(u.host, "auth.truelayer-sandbox.com");
-    assertEquals(u.searchParams.get("providers"), "uk-cs-mock");
-    assertEquals(u.searchParams.get("provider_id"), "mock");
     assertEquals(u.searchParams.get("state"), "ref-1");
-    assertEquals(u.searchParams.get("scope"), "info accounts balance transactions offline_access");
   } finally {
     Deno.env.delete("TRUELAYER_ENV");
   }
@@ -74,15 +68,15 @@ Deno.test("production bank list comes from /api/providers, filtered to the count
 });
 
 Deno.test("cancelled consent is rejected; approved code is exchanged and stored", async () => {
-  assertEquals((await trueLayer.completeLink("r0", new URLSearchParams({ error: "access_denied" }))).status, "rejected");
+  assertEquals((await trueLayer.completeLink("r0", new URLSearchParams({ error: "access_denied" }), "https://x/cb")).status, "rejected");
   const calls = stub({
     "POST auth.truelayer.com/connect/token": () => ({ body: { access_token: "AT", refresh_token: "RT", expires_in: 3600 } }),
   });
-  const r = await trueLayer.completeLink("r1", new URLSearchParams({ code: "c0de", state: "r1" }));
+  const r = await trueLayer.completeLink("r1", new URLSearchParams({ code: "c0de", state: "r1" }), "https://x/cb");
   assertEquals(r, { externalId: "r1", status: "linked" });
   const f = form(calls[0].init);
   assertEquals([f.get("grant_type"), f.get("code"), f.get("client_secret")], ["authorization_code", "c0de", "secret"]);
-  assertEquals(f.get("redirect_uri"), "http://localhost/functions/v1/bank-sync/callback");
+  assertEquals(f.get("redirect_uri"), "https://x/cb");
   assertEquals(mem.get("r1")?.refresh, "RT");
 });
 
@@ -127,4 +121,15 @@ Deno.test("account fetch: available balance, debit signs, pending flagged, merch
     ["Netflix", -10.99, false, "2026-10-01"],
     ["SALARY ACME", 1500, false, "2026-10-28"],
   ]);
+});
+
+Deno.test("pending fetch: unsupported is none, other failures surface", async () => {
+  mem.set("r5", { access: "AT", refresh: "RT", expiresAt: Date.now() + 3600_000 });
+  stub({
+    "GET api.truelayer.com/data/v1/accounts": () => ({ body: { results: [{ account_id: "a1" }] } }),
+    "GET api.truelayer.com/data/v1/accounts/a1/balance": () => ({ body: { results: [] } }),
+    "GET api.truelayer.com/data/v1/accounts/a1/transactions": () => ({ body: { results: [] } }),
+    "GET api.truelayer.com/data/v1/accounts/a1/transactions/pending": () => ({ status: 500, body: {} }),
+  });
+  await assertRejects(() => trueLayer.fetchAccount("r5", "a1"));
 });

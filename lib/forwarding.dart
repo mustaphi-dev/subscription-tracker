@@ -13,7 +13,7 @@ class ForwardingScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final address = ref.watch(inboundAddressProvider).value;
+    final address = ref.watch(profileProvider).value?.inboundEmail;
     return Scaffold(
       body: Ambient(
         child: SafeArea(

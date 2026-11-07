@@ -7,17 +7,20 @@ import 'package:go_router/go_router.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'data.dart';
-import 'ui.dart';
-import 'home.dart';
-import 'lock.dart';
 import 'country.dart';
+import 'data.dart';
+import 'forwarding.dart';
+import 'item_tile.dart';
+import 'lock.dart';
 import 'onboarding.dart';
 import 'profile.dart';
 import 'push.dart';
-import 'forwarding.dart';
-import 'screens.dart';
+import 'shell.dart';
 import 'signin.dart';
+import 'tab_page.dart';
+import 'ui.dart';
+import 'upcoming.dart';
+import 'widget_sync.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,10 +37,7 @@ Future<void> main() async {
 
 class _AuthRefresh extends ChangeNotifier {
   _AuthRefresh() {
-    _sub = db.auth.onAuthStateChange.listen((_) {
-      refreshNeedsCountry();
-      notifyListeners();
-    });
+    _sub = db.auth.onAuthStateChange.listen((_) => notifyListeners());
   }
   late final StreamSubscription _sub;
   @override
@@ -77,7 +77,7 @@ final router = GoRouter(
     GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),
     GoRoute(path: '/forwarding', builder: (_, _) => const ForwardingScreen()),
     GoRoute(path: '/upcoming', builder: (_, _) => const UpcomingScreen()),
-    GoRoute(path: '/confirm/:id', builder: (_, s) => ConfirmTrialScreen(s.pathParameters['id']!)),
+    GoRoute(path: confirmPath(':id'), builder: (_, s) => ConfirmTrialScreen(s.pathParameters['id']!)),
   ],
 );
 
@@ -95,15 +95,12 @@ class App extends ConsumerStatefulWidget {
   ConsumerState<App> createState() => _AppState();
 }
 
-class _AppState extends ConsumerState<App> with WidgetsBindingObserver {
-  bool? _hasPin;
+class _AppState extends ConsumerState<App> {
   StreamSubscription? _links;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    PinStore.hasPin().then((v) => setState(() => _hasPin = v));
     // Anyone already signed in has effectively onboarded; don't show it after a later sign-out.
     if (db.auth.currentSession != null && !onboarded.value) finishOnboarding();
     initPush(router);
@@ -123,46 +120,33 @@ class _AppState extends ConsumerState<App> with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _links?.cancel();
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    ref.read(obscureProvider.notifier).set(state != AppLifecycleState.resumed);
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
-      ref.read(lockProvider.notifier).backgrounded();
-    } else if (state == AppLifecycleState.resumed) {
-      ref.read(lockProvider.notifier).resumed();
-    }
   }
 
   void _home() {
     router.routerDelegate.navigatorKey.currentState?.popUntil((r) => r.isFirst);
     router.go('/');
-    ref.read(tabProvider.notifier).set(0);
+    goToTab(ref, AppTab.home);
   }
 
   @override
   Widget build(BuildContext context) {
-    // The PIN is per sign-in: re-check after every auth change so a new user sets their own.
-    ref.listen(uidProvider, (_, _) {
-      // The router already moves between sign-in and the app; this just drops the old tab.
-      ref.read(tabProvider.notifier).set(0);
-      PinStore.hasPin().then((v) => mounted ? setState(() => _hasPin = v) : null);
-    });
+    // The router already moves between sign-in and the app; this just drops the old tab.
+    ref.listen(uidProvider, (_, _) => goToTab(ref, AppTab.home));
     // Coming back through the lock (or a new sign-in) starts on Home, not wherever you left off.
     ref.listen(lockProvider, (_, locked) => locked ? _home() : null);
-    // Keep the home-screen widget in sync with live data.
-    ref.listen(itemsProvider, (_, next) {
-      final items = next.value;
-      if (items != null) updateTrialWidget(items, ref.read(baseCurrencyProvider).value ?? 'GBP');
+    ref.listen(profileProvider, (_, next) {
+      final p = next.value;
+      needsCountry.value = p != null && p.country == null;
     });
-
-    final locked = ref.watch(lockProvider);
-    final obscured = ref.watch(obscureProvider);
-    final signedIn = ref.watch(authProvider).value?.session ?? db.auth.currentSession;
+    // The home-screen widget shows the next trials in the display currency, so either change redraws it.
+    void syncWidget() {
+      final items = ref.read(itemsProvider).value;
+      if (items != null) updateTrialWidget(items, ref.read(baseProvider));
+    }
+    ref.listen(itemsProvider, (_, _) => syncWidget());
+    ref.listen(baseProvider, (_, _) => syncWidget());
 
     return MaterialApp.router(
       title: 'Wince',
@@ -170,18 +154,7 @@ class _AppState extends ConsumerState<App> with WidgetsBindingObserver {
       theme: buildTheme(),
       routerConfig: router,
       builder: (context, child) => Stack(children: [
-        child!,
-        // Lock gate sits above every route so no content renders underneath on resume.
-        if (signedIn != null && _hasPin != null && (locked || !_hasPin!))
-          Positioned.fill(
-            child: LiquidGlassLockScreen(
-              key: ValueKey(_hasPin),
-              setup: !_hasPin!,
-              onDone: () => setState(() => _hasPin = true),
-            ),
-          ),
-        // The lock screen already hides content; skip the blur so Face ID prompts don't flash it.
-        if (obscured && !locked) const Positioned.fill(child: PrivacyShield()),
+        LockGate(child: child!),
         const Positioned.fill(child: SplashOverlay()),
       ]),
     );

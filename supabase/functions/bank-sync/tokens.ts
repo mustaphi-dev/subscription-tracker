@@ -37,17 +37,18 @@ export async function open(sealed: string): Promise<Tokens> {
 
 export const dbTokens: TokenStore = {
   async get(id) {
-    const { data } = await admin.from("bank_tokens").select("ciphertext").eq("external_id", id).maybeSingle();
+    const { data } = await admin().from("bank_tokens").select("ciphertext").eq("external_id", id).maybeSingle();
     return data ? await open(data.ciphertext) : null;
   },
   async put(id, t) {
-    const { error } = await admin.from("bank_tokens").upsert({
+    const { error } = await admin().from("bank_tokens").upsert({
       external_id: id, ciphertext: await seal(t),
       expires_at: new Date(t.expiresAt).toISOString(), updated_at: new Date().toISOString(),
     });
     if (error) throw new Error(`bank_tokens: ${error.message}`);
   },
   async remove(id) {
-    await admin.from("bank_tokens").delete().eq("external_id", id);
+    const { error } = await admin().from("bank_tokens").delete().eq("external_id", id);
+    if (error) throw new Error(`bank_tokens: ${error.message}`);
   },
 };

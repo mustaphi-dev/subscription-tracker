@@ -20,7 +20,7 @@ class CountryScreen extends ConsumerStatefulWidget {
 }
 
 class _CountryScreenState extends ConsumerState<CountryScreen> {
-  final _search = TextEditingController();
+  String _q = '';
   late final Country? _guess = countryByCode(widget.current) ?? deviceCountry();
   late Country? _picked = _guess;
   bool _busy = false;
@@ -39,33 +39,29 @@ class _CountryScreenState extends ConsumerState<CountryScreen> {
     );
   }
 
-  @override
-  void dispose() {
-    _search.dispose();
-    super.dispose();
-  }
-
   Future<void> _save() async {
     final c = _picked;
     if (c == null) return;
-    final base = ref.read(baseCurrencyProvider).value;
+    final base = ref.read(profileProvider).value?.baseCurrency;
     // Moving country doesn't mean you think in a new currency, so ask rather than switch silently.
     final switchCurrency = !_editing || (c.currency != base && await _askSwitch(c, base));
     if (!mounted) return;
     setState(() => _busy = true);
     try {
       await setCountry(c.code, currency: switchCurrency ? c.currency : null);
+      // First pick: the router leaves once the profile echoes the country, so stay busy until then.
       if (mounted && _editing) Navigator.of(context).pop();
     } catch (e) {
-      if (mounted) showError(context, 'Couldn\'t save your country. Try again.', e);
-    } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+        showError(context, 'Couldn\'t save your country. Try again.', e);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final q = _search.text.trim().toLowerCase();
+    final q = _q.toLowerCase();
     final list = [
       // The phone's own region first, so most people just tap Continue.
       if (q.isEmpty && _guess != null) _guess,
@@ -99,7 +95,7 @@ class _CountryScreenState extends ConsumerState<CountryScreen> {
                       style: const TextStyle(color: kMuted, height: 1.4),
                     ),
                     const SizedBox(height: 18),
-                    GlassSearchField(controller: _search, hint: 'Search countries', onChanged: (_) => setState(() {})),
+                    GlassSearchField(hint: 'Search countries', onChanged: (v) => setState(() => _q = v)),
                   ],
                 ),
               ),
