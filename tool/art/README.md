@@ -1,25 +1,26 @@
 # Brand and onboarding art
 
-Everything here is generated from code: no AI image or video tools. Scenes are
+Everything here is generated from code: no AI image or video tools. The 3D scenes are
 rendered headless with Blender's Python module (`pip install bpy==5.2.3`, Python 3.13)
 using Cycles on the CPU with a transparent film. The post steps need
 `pip install numpy pillow scipy` and `ffmpeg`.
 
 ## App icon and splash mark
 
-`s_mark.py` builds the mark: a chrome S for Subtracker, made of the same grooved band as
-the renewals infinity sign, with one half twist through its spine. A violet light runs in
-the groove. Render it twice, with and without the light, and export the groove's path:
+The Wince W is pure vector geometry, in `wince/`. `wince_logo.py` builds it with shapely:
+four slanted strokes, with both outer legs cut away from the middle on a curved arc
+that starts at the elbow, so each leg ends in a knife edge. The bevel is a chamfer
+whose facets are shaded by a light at the top left. `render.js` rasterises the SVGs with
+the preinstalled Playwright Chromium.
 
-    python s_mark.py -- --size 1024 --samples 96 --twist 180 --span 0.6 --head 0.93 --lens 112 \
-        --bw 0.46 --bt 0.13 --face 0.95 --ev -0.1 --glow 1 --name s_glow  --out out/
-    python s_mark.py -- (same flags) --glow 0 --name s_plain --path out/s_path.json --out out/
-    python3 make_s_icons.py out/s_glow.png out/s_plain.png out/s_path.json ../..
+    pip install shapely pillow
+    python3 wince/make_w_icons.py ../..
 
-`make_s_icons.py` writes `assets/brand/icon.webp`, the iOS AppIcon set and the Android
-launcher icons (legacy, plus adaptive foreground and background). It also writes
-`assets/brand/mark.webp` (the S without its light) and `lib/brand_mark_path.dart` (the
-groove path), which the splash uses to draw the light live. Native launch screens are
+`make_w_icons.py` writes `assets/brand/icon.webp` (light) and `icon_dark.webp`, the iOS
+AppIcon set (single size, with light, dark and tinted appearances), and the Android
+launcher icons (legacy, plus adaptive foreground, background and monochrome). It also
+writes `assets/brand/w_left.webp`, `w_middle.webp` and `w_right.webp`, the white W in
+three layers on one square canvas, which the splash animates. Native launch screens are
 background colour only, so the splash starts from a dark screen.
 
 ## Onboarding loops

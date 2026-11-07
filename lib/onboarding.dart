@@ -33,9 +33,9 @@ Widget _rise(double r, Widget child, {double dy = 16}) => Opacity(
 // ───────── Splash ─────────
 
 /// Cold-start brand moment layered over the app. The native launch screen is only the
-/// background colour. A violet light traces an S out of the dark, the chrome S (the app
-/// icon's mark) materialises around it with the light settling into its groove, a sheen
-/// crosses the metal, the wordmark writes itself in underneath, and everything dissolves
+/// background colour. The middle of the W rises out of the dark, the two cut legs slide
+/// down their slant into place and the mark flinches as they land (the wince), a sheen
+/// crosses the face, the wordmark writes itself in underneath, and everything dissolves
 /// into the app. Tap to skip; reduced motion shows the finished mark and fades.
 class SplashOverlay extends StatefulWidget {
   const SplashOverlay({super.key});
@@ -46,7 +46,7 @@ class SplashOverlay extends StatefulWidget {
 class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateMixin {
   static const _length = Duration(milliseconds: 2500);
 
-  /// Fraction of the intro at which the chrome S has fully appeared.
+  /// Fraction of the intro at which the W is whole (the legs land and it flinches).
   static const _traced = 0.6;
 
   late final _intro = AnimationController(vsync: this, duration: _length);
@@ -59,7 +59,7 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
     if (_started) return;
     _started = true;
     final reduced = MediaQuery.disableAnimationsOf(context);
-    // Start once the chrome S is decoded (or after a beat regardless), so it never pops in late.
+    // Start once the W is decoded (or after a beat regardless), so it never pops in late.
     var begun = false;
     void begin() {
       if (begun || !mounted) return;
@@ -75,7 +75,7 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
       });
     }
 
-    precacheImage(const AssetImage(kMarkAsset), context).whenComplete(begin);
+    Future.wait([for (final a in kMarkLayers) precacheImage(AssetImage(a), context)]).whenComplete(begin);
     Future.delayed(const Duration(milliseconds: 600), begin);
   }
 
@@ -104,10 +104,10 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
         final t = _intro.value, e = Curves.easeInCubic.transform(_exit.value);
         final size = math.min(MediaQuery.sizeOf(context).width * 0.5, 210.0);
 
-        final run = _span(t, 0.03, 0.46, Curves.easeInOutCubic);            // light traces the S
-        final settle = _span(t, 0.3, _traced);                              // ...and stays lit
-        final rise = _span(t, 0.32, _traced);                               // chrome materialises round it
-        final glow = _span(t, 0.4, _traced + 0.25);
+        final middle = _span(t, 0.04, 0.36);                                 // the middle of the W rises
+        final legs = _span(t, 0.26, _traced, Curves.easeInCubic);            // the cut legs slide in and land
+        final flinch = 1 - (2 * (t - _traced) / 0.16).abs().clamp(0.0, 1.0); // a quick squeeze on landing
+        final glow = _span(t, 0.2, _traced + 0.25);
         final lift = _span(t, _traced, 0.9, Curves.easeInOutCubic);
         final shift = Offset(0, -26 * lift);
 
@@ -127,7 +127,7 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    // Violet light pooling behind the S once it is lit.
+                    // Soft light pooling behind the W.
                     Center(
                       child: Transform.translate(
                         offset: shift,
@@ -138,9 +138,9 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
                             shape: BoxShape.circle,
                             gradient: RadialGradient(
                               colors: [
-                                const Color(0xFF7B4DFF).withValues(alpha: 0.28 * glow),
-                                const Color(0xFF4B2BD6).withValues(alpha: 0.08 * glow),
-                                const Color(0xFF4B2BD6).withValues(alpha: 0),
+                                const Color(0xFFFFFFFF).withValues(alpha: 0.10 * glow),
+                                const Color(0xFFB8B8C8).withValues(alpha: 0.03 * glow),
+                                const Color(0xFFB8B8C8).withValues(alpha: 0),
                               ],
                               stops: const [0, 0.4, 1],
                             ),
@@ -152,13 +152,12 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
                       child: Transform.translate(
                         offset: shift,
                         child: Transform.scale(
-                          scale: (0.96 + 0.04 * Curves.easeOutCubic.transform(rise)) * (1 + 0.18 * e),
+                          scale: (0.96 + 0.04 * Curves.easeOutCubic.transform(middle)) * (1 + 0.18 * e),
                           child: BrandMark(
                             size: size,
-                            chrome: rise,
-                            head: run * 1.45,
-                            tail: 0.45,
-                            settle: settle,
+                            middle: middle,
+                            legs: legs,
+                            flinch: flinch,
                             sheen: _span(t, _traced - 0.06, _traced + 0.3, Curves.easeInOut),
                           ),
                         ),
