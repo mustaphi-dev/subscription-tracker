@@ -21,8 +21,12 @@ class DashboardTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final base = ref.watch(baseProvider);
-    final all = ref.watch(itemsProvider).value ?? [];
-    final sources = ref.watch(sourcesProvider).value ?? [];
+    final itemsAsync = ref.watch(itemsProvider), sourcesAsync = ref.watch(sourcesProvider);
+    // Right after sign-in the streams reload while still holding the signed-out (empty) value;
+    // show nothing until this account's data lands, so the empty state never flashes.
+    final ready = [itemsAsync, sourcesAsync, ref.watch(profileProvider)].every((a) => a.hasValue && !a.isLoading);
+    final all = itemsAsync.value ?? [];
+    final sources = sourcesAsync.value ?? [];
     final live = ref.watch(liveItemsProvider);
     final out = live.monthlyOut, income = live.monthlyIn;
     final trials = live.where((i) => i.isRunningTrial).toList();
@@ -31,6 +35,7 @@ class DashboardTab extends ConsumerWidget {
       title: 'Home',
       onRefresh: () => refreshBanks(context, ref),
       slivers: [
+        if (ready) ...[
         SliverToBoxAdapter(
           child: _Hero(
             label: sources.isEmpty ? 'Monthly outgoings' : 'Total balance',
@@ -43,6 +48,7 @@ class DashboardTab extends ConsumerWidget {
         if (all.isNotEmpty) const SliverToBoxAdapter(child: _NextDays()),
         if (trials.isNotEmpty) SliverToBoxAdapter(child: _TrialRings(trials)),
         if (all.isEmpty) const SliverToBoxAdapter(child: _EmptyState()) else ...upcomingSlivers(context, ref, ref.watch(filteredItemsProvider), limit: 6),
+        ],
       ],
     );
   }
