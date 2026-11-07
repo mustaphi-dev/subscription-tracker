@@ -7,5 +7,6 @@ void main() {
     expect(isoCurrency('ghs '), 'GHS');
     expect(isoCurrency('G  '), 'GBP');
     expect(isoCurrency(null), 'GBP');
+    expect(Profile({'global_base_currency': null}).baseCurrency, 'GBP');
   });
 }

@@ -15,13 +15,11 @@ export interface Aggregator {
   id: string;
   /** ISO country codes new links go through this provider for. Empty = existing links only. */
   countries: string[];
-  /** Banks a user in [country] can pick. */
   listBanks(country: string): Promise<Bank[]>;
   /** Start a consent; returns the provider's id for it and the URL the user opens. */
   createLink(o: { bank: string; country: string; reference: string; redirect: string }): Promise<{ externalId: string; link: string }>;
-  /** Finish a consent from the redirect's query string. May swap in a new id (e.g. a session id). */
-  completeLink(externalId: string, query: URLSearchParams): Promise<{ externalId: string; status: LinkStatus }>;
-  /** Current state of a consent and the account ids it covers. */
+  /** Finish a consent from the redirect's query string; [redirect] is the one createLink was given. May swap in a new id. */
+  completeLink(externalId: string, query: URLSearchParams, redirect: string): Promise<{ externalId: string; status: LinkStatus }>;
   status(externalId: string): Promise<{ status: LinkStatus; accounts: string[] }>;
   /** Balance and recent transactions for one account under the consent [externalId]. */
   fetchAccount(externalId: string, accountId: string): Promise<{ account: Account; transactions: Txn[] }>;

@@ -13,7 +13,7 @@ void main() {
       return null;
     });
     await t.pumpWidget(ProviderScope(
-      overrides: [inboundAddressProvider.overrideWith((_) async => 'adams-k7f2x@trywince.app')],
+      overrides: [profileProvider.overrideWith((_) => Stream.value(Profile({'inbound_parse_email': 'adams-k7f2x@trywince.app'})))],
       child: const MaterialApp(home: ForwardingScreen()),
     ));
     await t.pump();

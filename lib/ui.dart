@@ -8,10 +8,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 
-import 'brands.dart';
-import 'countries.dart';
-import 'data.dart';
-
 // ───────── Tokens ─────────
 // Content lives on solid layered surfaces; glass is reserved for floating chrome.
 const kBg = Color(0xFF07080C);
@@ -22,34 +18,12 @@ const kText = Color(0xFFF4F5F7);
 const kMuted = Color(0xFF8B909C);
 const kFaint = Color(0xFF545966);
 const kAccent = Color(0xFF8B7CFF);
+const kBlue = Color(0xFF3D7BFF);
 /// The blue-violet glow at the top of every page (and the profile's gradient).
 const kGlow = Color(0xFF5A3FF0);
 const kMint = Color(0xFF34D399);
 const kAmber = Color(0xFFFFB547);
 const kCrimson = Color(0xFFFF5C6C);
-
-const providerColors = {
-  'revolut': Color(0xFF3D7BFF),
-  'wise': Color(0xFF9FE870),
-  'lloyds': Color(0xFF00A56A),
-  'paypal': Color(0xFF6C63FF),
-};
-const providerLabels = {'revolut': 'Revolut', 'wise': 'Wise', 'lloyds': 'Lloyds', 'paypal': 'PayPal'};
-
-/// A bank's brand colour if the app knows it, otherwise a stable colour from its name.
-Color providerColorFor(String bank) {
-  final key = bank.toLowerCase();
-  for (final e in providerColors.entries) {
-    if (key.contains(e.key)) return e.value;
-  }
-  return HSLColor.fromAHSL(1, (key.hashCode % 360).abs().toDouble(), 0.55, 0.6).toColor();
-}
-
-extension SourceLook on PaymentSource {
-  /// Bank name to show: the provider's, or whatever the user typed for other banks.
-  String get bank => providerLabels[provider] ?? institution ?? 'Bank';
-  Color get color => providerColors[provider] ?? HSLColor.fromAHSL(1, (bank.toLowerCase().hashCode % 360).abs().toDouble(), 0.55, 0.6).toColor();
-}
 
 const springOut = Curves.easeOutCubic;
 const springBounce = Curves.easeOutBack;
@@ -117,13 +91,6 @@ const label = TextStyle(color: kMuted, fontSize: 13, fontWeight: FontWeight.w500
 const caption = TextStyle(color: kMuted, fontSize: 12);
 
 String money(num amount, String ccy) => NumberFormat.simpleCurrency(locale: 'en_GB', name: ccy).format(amount);
-
-/// Short price for chips: symbol, no `.00` on whole amounts, optional cycle. `£20/mo`, `GH₵78.50/qtr`.
-String priceTag(num amount, String ccy, [String? cycle]) {
-  final symbol = NumberFormat.simpleCurrency(locale: 'en_GB', name: ccy).currencySymbol;
-  final n = NumberFormat(amount % 1 == 0 ? '#,##0' : '#,##0.00', 'en_GB').format(amount);
-  return '$symbol$n${const {'weekly': '/wk', 'monthly': '/mo', 'quarterly': '/qtr', 'yearly': '/yr'}[cycle] ?? ''}';
-}
 
 String compactMoney(num amount, String ccy) =>
     NumberFormat.compactSimpleCurrency(locale: 'en_GB', name: ccy, decimalDigits: amount.abs() < 1000 ? 0 : 1).format(amount);
@@ -261,22 +228,21 @@ class Glass extends StatelessWidget {
 
 /// Search input in the bottom nav's Liquid Glass. Shows a clear button once something is typed.
 class GlassSearchField extends StatefulWidget {
-  const GlassSearchField({super.key, required this.hint, required this.onChanged, this.controller});
+  const GlassSearchField({super.key, required this.hint, required this.onChanged});
   final String hint;
 
   /// Called with the trimmed text on every change, including '' when cleared.
   final ValueChanged<String> onChanged;
-  final TextEditingController? controller;
   @override
   State<GlassSearchField> createState() => _GlassSearchFieldState();
 }
 
 class _GlassSearchFieldState extends State<GlassSearchField> {
-  late final _c = widget.controller ?? TextEditingController();
+  final _c = TextEditingController();
 
   @override
   void dispose() {
-    if (widget.controller == null) _c.dispose();
+    _c.dispose();
     super.dispose();
   }
 
@@ -410,54 +376,6 @@ class SectionHeader extends StatelessWidget {
       );
 }
 
-class MerchantAvatar extends StatelessWidget {
-  const MerchantAvatar(this.name, {super.key, this.size = 40, this.dot});
-  final String name;
-  final double size;
-  final Color? dot;
-  @override
-  Widget build(BuildContext context) {
-    final hue = (name.toLowerCase().hashCode % 360).abs().toDouble();
-    final c = HSLColor.fromAHSL(1, hue, 0.45, 0.52).toColor();
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Stack(clipBehavior: Clip.none, children: [
-        LogoTile(
-          name,
-          size: size,
-          radius: size * 0.32,
-          fallback: Container(
-            width: size,
-            height: size,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(size * 0.32),
-              gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [c, Color.lerp(c, kBg, 0.45)!]),
-            ),
-            child: Text(name.isEmpty ? '?' : name[0].toUpperCase(),
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: size * 0.42, color: Colors.white)),
-          ),
-        ),
-        if (dot != null)
-          Positioned(
-            right: -3,
-            bottom: -3,
-            child: Container(
-              width: size * 0.36,
-              height: size * 0.36,
-              decoration: BoxDecoration(
-                color: dot,
-                shape: BoxShape.circle,
-                border: Border.all(color: kSurface, width: 2),
-              ),
-            ),
-          ),
-      ]),
-    );
-  }
-}
-
 // ───────── Toast ─────────
 
 OverlayEntry? _toast;
@@ -476,8 +394,10 @@ void showToast(BuildContext context, String message,
   duration ??= onUndo == null ? const Duration(milliseconds: 2600) : const Duration(seconds: 5);
   _toastTimer?.cancel();
   _toast?.remove();
-  final overlay = Overlay.of(context, rootOverlay: true);
-  if (closeSheets) Navigator.of(context, rootNavigator: true).popUntil((r) => r is! ModalBottomSheetRoute);
+  // Via the navigator, so the navigator's own context (see closeSheet) can show toasts too.
+  final nav = Navigator.of(context, rootNavigator: true);
+  final overlay = nav.overlay!;
+  if (closeSheets) nav.popUntil((r) => r is! ModalBottomSheetRoute);
   final visible = ValueNotifier(false);
   void close() {
     visible.value = false;
@@ -612,26 +532,14 @@ Future<bool> confirmSheet(BuildContext context,
   return ok == true;
 }
 
-/// Solid bottom sheet with a grab handle.
-Future<T?> showSheet<T>(BuildContext context, Widget child) => showModalBottomSheet<T>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: kSurface,
-      barrierColor: Colors.black54,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
-      builder: (ctx) => Padding(
+Future<T?> showSheet<T>(BuildContext context, Widget child) => _sheet<T>(
+      context,
+      (ctx) => Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
         child: SafeArea(
           top: false,
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Center(
-              child: Container(
-                margin: const EdgeInsets.only(top: 10, bottom: 8),
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(color: kFaint, borderRadius: BorderRadius.circular(2)),
-              ),
-            ),
+            _handle,
             Flexible(child: child),
           ]),
         ),
@@ -639,13 +547,9 @@ Future<T?> showSheet<T>(BuildContext context, Widget child) => showModalBottomSh
     );
 
 /// Bottom sheet the user can drag taller by its handle; [builder] must hand [scroll] to its list.
-Future<T?> showDraggableSheet<T>(BuildContext context, Widget Function(ScrollController scroll) builder) => showModalBottomSheet<T>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: kSurface,
-      barrierColor: Colors.black54,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
-      builder: (_) => DraggableScrollableSheet(
+Future<T?> showDraggableSheet<T>(BuildContext context, Widget Function(ScrollController scroll) builder) => _sheet<T>(
+      context,
+      (_) => DraggableScrollableSheet(
         expand: false,
         initialChildSize: 0.45,
         minChildSize: 0.25,
@@ -654,23 +558,37 @@ Future<T?> showDraggableSheet<T>(BuildContext context, Widget Function(ScrollCon
         builder: (ctx, scroll) => SafeArea(
           top: false,
           child: Column(children: [
-            Center(
-              child: Container(
-                margin: const EdgeInsets.only(top: 10, bottom: 8),
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(color: kFaint, borderRadius: BorderRadius.circular(2)),
-              ),
-            ),
+            _handle,
             Expanded(child: builder(scroll)),
           ]),
         ),
       ),
     );
 
+Future<T?> _sheet<T>(BuildContext context, WidgetBuilder builder) => showModalBottomSheet<T>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: kSurface,
+      barrierColor: Colors.black54,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      builder: builder,
+    );
+
+final _handle = Center(
+  child: Container(
+    margin: const EdgeInsets.only(top: 10, bottom: 8),
+    width: 36,
+    height: 4,
+    decoration: BoxDecoration(color: kFaint, borderRadius: BorderRadius.circular(2)),
+  ),
+);
+
+/// Closes the sheet [context] belongs to and returns the navigator's context, which outlives it,
+/// for whatever the sheet's action opens next.
+BuildContext closeSheet(BuildContext context) => (Navigator.of(context)..pop()).context;
+
 // ───────── Select drawer ─────────
 
-/// One choice in [pickFromSheet]: value, label, optional subtitle.
 typedef SelectOption<T> = (T value, String label, String? sub);
 
 /// Bottom-sheet list picker with a check on the current value. Returns the picked value, or null if dismissed.
@@ -712,7 +630,6 @@ Future<T?> pickFromSheet<T>(BuildContext context, {required String title, requir
       ]),
     );
 
-/// Form field that shows the current choice and opens [pickFromSheet].
 class SelectField<T> extends StatelessWidget {
   const SelectField({super.key, required this.title, required this.options, required this.value, required this.onChanged, this.hint});
   final String title;
@@ -746,152 +663,6 @@ class SelectField<T> extends StatelessWidget {
           ]),
         ),
       ),
-    );
-  }
-}
-
-const currencyNames = {
-  'GBP': 'British pound', 'USD': 'US dollar', 'EUR': 'Euro', 'GHS': 'Ghanaian cedi', 'NGN': 'Nigerian naira',
-  'KES': 'Kenyan shilling', 'ZAR': 'South African rand', 'CAD': 'Canadian dollar', 'AUD': 'Australian dollar',
-  'CHF': 'Swiss franc', 'JPY': 'Japanese yen', 'INR': 'Indian rupee', 'AED': 'UAE dirham',
-};
-
-List<SelectOption<String>> currencyOptions(Iterable<String> codes) => [for (final c in codes) (c, c, currencyNames[c])];
-
-// ───────── Currency picker ─────────
-
-const currencies = [
-  ('GBP', '🇬🇧', 'British pound'),
-  ('USD', '🇺🇸', 'US dollar'),
-  ('EUR', '🇪🇺', 'Euro'),
-  ('GHS', '🇬🇭', 'Ghanaian cedi'),
-];
-
-/// The picker's currencies, plus the user's own if it isn't one of them (e.g. NGN after picking Nigeria).
-List<(String, String, String)> currencyChoices(String current) {
-  if (currencies.any((c) => c.$1 == current)) return currencies;
-  final home = countries.where((c) => c.currency == current).firstOrNull;
-  return [...currencies, (current, home?.flag ?? '💱', currencyNames[current] ?? home?.name ?? current)];
-}
-
-/// Custom popover that springs out of its top-right corner, just under the top bar.
-/// Opens with a spring; closes fast (showGeneralDialog can't have a shorter reverse duration).
-Future<String?> pickCurrency(BuildContext context, String current) => Navigator.of(context, rootNavigator: true).push<String>(PageRouteBuilder(
-      opaque: false,
-      barrierDismissible: true,
-      barrierLabel: 'Close',
-      barrierColor: Colors.black38,
-      transitionDuration: const Duration(milliseconds: 380),
-      reverseTransitionDuration: const Duration(milliseconds: 150),
-      pageBuilder: (ctx, _, _) => Align(
-        alignment: Alignment.topRight,
-        child: Padding(
-          padding: EdgeInsets.only(top: MediaQuery.of(ctx).padding.top + 52, right: 12),
-          child: Material(
-            color: Colors.transparent,
-            child: Container(
-              width: 248,
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: kSurfaceHi,
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: kLine),
-                boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 32, offset: Offset(0, 12))],
-              ),
-              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(12, 10, 12, 6),
-                  child: Text('DISPLAY CURRENCY', style: TextStyle(color: kFaint, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
-                ),
-                for (final (code, flag, name) in currencyChoices(current))
-                  Pressable(
-                    scale: 0.98,
-                    onTap: () => Navigator.pop(ctx, code),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-                      decoration: BoxDecoration(
-                        color: code == current ? Colors.white.withValues(alpha: 0.06) : Colors.transparent,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Row(children: [
-                        Text(flag, style: const TextStyle(fontSize: 22)),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text(code, style: const TextStyle(fontWeight: FontWeight.w700)),
-                            Text(name, style: caption),
-                          ]),
-                        ),
-                        AnimatedOpacity(
-                          opacity: code == current ? 1 : 0,
-                          duration: const Duration(milliseconds: 150),
-                          child: const Icon(CupertinoIcons.checkmark, color: kMint, size: 20),
-                        ),
-                      ]),
-                    ),
-                  ),
-              ]),
-            ),
-          ),
-        ),
-      ),
-      transitionsBuilder: (_, a, _, child) => FadeTransition(
-        opacity: CurvedAnimation(parent: a, curve: const Interval(0, 0.5), reverseCurve: Curves.easeIn),
-        child: ScaleTransition(
-          alignment: Alignment.topRight,
-          scale: Tween(begin: 0.6, end: 1.0).animate(CurvedAnimation(parent: a, curve: springBounce, reverseCurve: Curves.easeIn)),
-          child: child,
-        ),
-      ),
-    ));
-
-/// Pill that shows the base currency and opens [pickCurrency].
-class CurrencyPill extends StatelessWidget {
-  const CurrencyPill({super.key, required this.current, required this.onChanged});
-  final String current;
-  final ValueChanged<String> onChanged;
-  @override
-  Widget build(BuildContext context) {
-    final flag = currencyChoices(current).where((c) => c.$1 == current).firstOrNull?.$2 ?? '💱';
-    return Semantics(
-      button: true,
-      label: 'Display currency $current',
-      child: Pressable(
-        onTap: () async {
-          final picked = await pickCurrency(context, current);
-          if (picked != null && picked != current) onChanged(picked);
-        },
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(8, 6, 10, 6),
-          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(18), border: Border.all(color: kLine)),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Text(flag, style: const TextStyle(fontSize: 16)),
-            const SizedBox(width: 6),
-            Text(current, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-            const SizedBox(width: 2),
-            const Icon(CupertinoIcons.chevron_up_chevron_down, size: 16, color: kMuted),
-          ]),
-        ),
-      ),
-    );
-  }
-}
-
-/// Signed-in user's initial on the brand gradient.
-class ProfileAvatar extends StatelessWidget {
-  const ProfileAvatar({super.key, this.size = 36});
-  final double size;
-  @override
-  Widget build(BuildContext context) {
-    final email = db.auth.currentUser?.email ?? '';
-    return Container(
-      width: size,
-      height: size,
-      alignment: Alignment.center,
-      decoration: const BoxDecoration(shape: BoxShape.circle, gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [kAccent, Color(0xFF3D7BFF)])),
-      child: email.isEmpty
-          ? Icon(CupertinoIcons.person_fill, size: size * 0.55)
-          : Text(email[0].toUpperCase(), style: display(size * 0.45, weight: FontWeight.w700)),
     );
   }
 }

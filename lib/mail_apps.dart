@@ -17,7 +17,6 @@ enum MailApp {
   final String label;
   final String? iosUrl, androidPackage;
 
-  /// "Open Gmail", "Open Outlook", … or "Open mail app" when the domain says nothing.
   String get action => 'Open $label';
 
   static MailApp forEmail(String email, [TargetPlatform? platform]) {

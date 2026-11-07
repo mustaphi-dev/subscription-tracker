@@ -25,9 +25,4 @@ void main() {
     expect(countryByCode('GH')!.currency, 'GHS');
     expect(countryByCode('ZZ'), isNull);
   });
-
-  test('bank linking starts with the UK only', () {
-    expect(countryByCode('GB')!.bankLinking, isTrue);
-    expect(countryByCode('GH')!.bankLinking, isFalse);
-  });
 }

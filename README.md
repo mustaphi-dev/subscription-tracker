@@ -32,7 +32,7 @@ select vault.create_secret('<sb_secret_… key>', 'service_key');
 
 Use a secret key (`sb_secret_…`, Project Settings → API Keys). The legacy `eyJ…` service_role key is rejected by the functions on newer projects.
 
-Bank linking is offered per country. Each bank-data provider is one file in `supabase/functions/bank-sync/aggregators/`; add it to `AGGREGATORS` in `index.ts` and its country to `bankLinkingCountries` in `lib/countries.dart`. UK banks link through [TrueLayer](https://console.truelayer.com): in its Console, add the redirect URI `https://<ref>.supabase.co/functions/v1/bank-sync/callback` and enable the Data API scopes `info accounts balance transactions offline_access`, then set the client id and secret above. `BANK_TOKEN_KEY` encrypts users' bank tokens at rest; set it once and keep it, because changing it disconnects every TrueLayer link. To test against TrueLayer's sandbox, use the sandbox client id and secret and also set `TRUELAYER_ENV=sandbox`: the bank list shows only Mock Bank, and you sign in with `john` / `doe`.
+Bank linking is offered per country. Each bank-data provider is one file in `supabase/functions/bank-sync/aggregators/` (TrueLayer is the only one, called directly from `index.ts`); its countries must match `bankLinkingCountries` in `lib/countries.dart`. UK banks link through [TrueLayer](https://console.truelayer.com): in its Console, add the redirect URI `https://<ref>.supabase.co/functions/v1/bank-sync/callback` and enable the Data API scopes `info accounts balance transactions offline_access`, then set the client id and secret above. `BANK_TOKEN_KEY` encrypts users' bank tokens at rest; set it once and keep it, because changing it disconnects every TrueLayer link. To test against TrueLayer's sandbox, use the sandbox client id and secret and also set `TRUELAYER_ENV=sandbox`: the bank list shows only Mock Bank, and you sign in with `john` / `doe`.
 
 Email forwarding: each user gets an address like `adams-k7f2x@trywince.app`. Cloudflare Email Routing catches all mail to the domain and hands it to the Email Worker in `workers/inbound-email/`, which posts it to `parse-trial-receipt`. To set it up, deploy the worker and give both sides the same secret:
 
@@ -45,7 +45,7 @@ supabase secrets set INBOUND_WEBHOOK_SECRET="$SECRET"
 
 Then in Cloudflare → Email Routing, set the catch-all to *Send to a Worker* → `wince-inbound-email`. Addresses you read yourself (e.g. `hello@`) need their own rule above it, or the worker swallows them. Worker self-check: `node workers/inbound-email/check.mjs`. Receipts are read by Claude Haiku; set `ANTHROPIC_MODEL` to use another model.
 
-Provider tests: `deno test --allow-env supabase/functions/bank-sync/aggregators/`.
+Bank-sync tests: `cd supabase/functions/bank-sync && deno test -A`.
 
 Push notifications: run `flutterfire configure` and upload your APNs key to Firebase.
 

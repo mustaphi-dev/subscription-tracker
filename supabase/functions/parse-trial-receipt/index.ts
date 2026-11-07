@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
     if (url.searchParams.get("secret") !== env("INBOUND_WEBHOOK_SECRET")) return json({ error: "forbidden" }, 403);
     const mail = await req.json();
     const to = [mail.OriginalRecipient, ...(mail.ToFull ?? []).map((t: any) => t.Email)].filter(Boolean);
-    const { data } = await admin.from("profiles").select("id").in("inbound_parse_email", to.map((t) => t.toLowerCase())).maybeSingle();
+    const { data } = await admin().from("profiles").select("id").in("inbound_parse_email", to.map((t) => t.toLowerCase())).maybeSingle();
     uid = data?.id ?? null;
     if (!uid) return json({ ignored: "unknown recipient" }); // 200 so Postmark doesn't retry
     content = [{ type: "text", text: `Subject: ${mail.Subject}\nFrom: ${mail.From}\nDate: ${mail.Date}\n\n${mail.TextBody || mail.HtmlBody}`.slice(0, 60_000) }];
@@ -67,23 +67,26 @@ Deno.serve(async (req) => {
       }],
     }),
   });
-  if (!res.ok) return json({ error: `ai ${res.status}`, detail: await res.text() }, 502);
+  if (!res.ok) {
+    console.error("ai", res.status, await res.text());
+    return json({ error: `ai ${res.status}` }, 502);
+  }
   const x = (await res.json()).content.find((c: any) => c.type === "tool_use")?.input;
   if (!x?.is_relevant) return json({ ignored: "not a billing receipt" });
 
   // A second receipt for something already tracked (monthly invoice, re-forwarded email) isn't a new item.
   // ponytail: exact merchant name match; "Canva" vs "Canva Pro" still slips through, normalise names if that bites.
-  const { data: dup } = await admin.from("financial_items").select("id, merchant_name")
+  const { data: dup } = await admin().from("financial_items").select("id, merchant_name")
     .eq("user_id", uid).eq("item_type", x.item_type).neq("status", "cancelled")
     .ilike("merchant_name", x.merchant_name.replace(/[%_\\]/g, "\\$&"))
     .limit(1).maybeSingle();
   if (dup) return json({ duplicate: dup });
 
   const { data: source } = x.payment_source
-    ? await admin.from("payment_sources").select("id").eq("user_id", uid).eq("provider", x.payment_source).limit(1).maybeSingle()
+    ? await admin().from("payment_sources").select("id").eq("user_id", uid).eq("provider", x.payment_source).limit(1).maybeSingle()
     : { data: null };
 
-  const { data: item, error } = await admin.from("financial_items").insert({
+  const { data: item, error } = await admin().from("financial_items").insert({
     user_id: uid,
     payment_source_id: source?.id ?? null,
     item_type: x.item_type,

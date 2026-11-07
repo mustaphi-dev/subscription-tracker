@@ -7,13 +7,11 @@ import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 
 import 'data.dart';
 import 'ui.dart';
 
-const _storage = FlutterSecureStorage();
 const _pinLength = 6;
 const lockTimeout = Duration(minutes: 5);
 
@@ -21,8 +19,8 @@ const lockTimeout = Duration(minutes: 5);
 /// account that set it: signing back in keeps it, a different account sets its own.
 class PinStore {
   static Future<bool> hasPin() async {
-    if (await _storage.read(key: 'pin_hash') == null) return false;
-    final owner = await _storage.read(key: 'pin_owner');
+    if (await storage.read(key: 'pin_hash') == null) return false;
+    final owner = await storage.read(key: 'pin_owner');
     final uid = db.auth.currentUser?.id;
     if (owner == null || uid == null || owner == uid) return true; // PINs set before owners were stored count as yours
     await clear();
@@ -33,29 +31,29 @@ class PinStore {
 
   static Future<void> setPin(String pin) async {
     final salt = base64Url.encode(List.generate(16, (_) => Random.secure().nextInt(256)));
-    await _storage.write(key: 'pin_salt', value: salt);
-    await _storage.write(key: 'pin_hash', value: _hash(pin, salt));
-    if (db.auth.currentUser?.id case final uid?) await _storage.write(key: 'pin_owner', value: uid);
-    await _storage.delete(key: 'pin_fails');
+    await storage.write(key: 'pin_salt', value: salt);
+    await storage.write(key: 'pin_hash', value: _hash(pin, salt));
+    if (db.auth.currentUser?.id case final uid?) await storage.write(key: 'pin_owner', value: uid);
+    await storage.delete(key: 'pin_fails');
   }
 
   /// Returns null on success, else seconds to wait (0 = just wrong).
   static Future<int?> verify(String pin) async {
-    final fails = int.parse(await _storage.read(key: 'pin_fails') ?? '0');
-    final until = int.parse(await _storage.read(key: 'pin_locked_until') ?? '0');
+    final fails = int.parse(await storage.read(key: 'pin_fails') ?? '0');
+    final until = int.parse(await storage.read(key: 'pin_locked_until') ?? '0');
     final wait = ((until - DateTime.now().millisecondsSinceEpoch) / 1000).ceil();
     if (wait > 0) return wait;
 
-    final salt = await _storage.read(key: 'pin_salt') ?? '';
-    if (_hash(pin, salt) == await _storage.read(key: 'pin_hash')) {
-      await _storage.delete(key: 'pin_fails');
+    final salt = await storage.read(key: 'pin_salt') ?? '';
+    if (_hash(pin, salt) == await storage.read(key: 'pin_hash')) {
+      await storage.delete(key: 'pin_fails');
       return null;
     }
     // 5 free attempts, then 30s, 60s, 120s… cooldown.
-    await _storage.write(key: 'pin_fails', value: '${fails + 1}');
+    await storage.write(key: 'pin_fails', value: '${fails + 1}');
     if (fails + 1 >= 5) {
       final secs = 30 * pow(2, fails + 1 - 5).toInt();
-      await _storage.write(
+      await storage.write(
           key: 'pin_locked_until', value: '${DateTime.now().millisecondsSinceEpoch + secs * 1000}');
       return secs;
     }
@@ -65,22 +63,21 @@ class PinStore {
   /// Forgets the PIN and its lockout, so a new one is set at the next sign-in.
   static Future<void> clear() async {
     for (final k in ['pin_hash', 'pin_salt', 'pin_owner', 'pin_fails', 'pin_locked_until', 'biometric']) {
-      await _storage.delete(key: k);
+      await storage.delete(key: k);
     }
   }
 
-  static Future<bool> biometricEnabled() async => await _storage.read(key: 'biometric') != 'off';
-  static Future<void> setBiometric(bool on) => _storage.write(key: 'biometric', value: on ? 'on' : 'off');
+  static Future<bool> biometricEnabled() async => await storage.read(key: 'biometric') != 'off';
+  static Future<void> setBiometric(bool on) => storage.write(key: 'biometric', value: on ? 'on' : 'off');
 }
 
 /// true = app content hidden behind the lock screen.
 class LockController extends Notifier<bool> {
   DateTime? _backgroundedAt;
   @override
-  bool build() => true; // cold start is always locked
+  bool build() => true;
 
   void unlock() => state = false;
-  void lock() => state = true;
   void backgrounded() => _backgroundedAt ??= DateTime.now();
   void resumed() {
     final at = _backgroundedAt;
@@ -102,11 +99,10 @@ class ObscureController extends Notifier<bool> {
   @override
   bool build() => false;
   // Our own Face ID sheet makes the app inactive too; don't blur behind it.
-  void set(bool v) => state = v && !biometricPrompt;
+  void set(bool v) => state = v && !_biometricPrompt;
 }
 
-/// True while the Face ID sheet is up.
-bool biometricPrompt = false;
+bool _biometricPrompt = false;
 
 final obscureProvider = NotifierProvider<ObscureController, bool>(ObscureController.new);
 
@@ -128,6 +124,98 @@ class AppLogo extends StatelessWidget {
         borderRadius: BorderRadius.circular(size * 0.225),
         child: Image.asset(Theme.of(context).brightness == Brightness.dark ? 'assets/brand/icon_dark.webp' : 'assets/brand/icon.webp', width: size, height: size, filterQuality: FilterQuality.medium),
       );
+}
+
+/// Sits over every route while signed in: asks for a new PIN until one is set, and for the PIN
+/// (or Face ID) whenever the app is locked. Owns the app-switcher blur too.
+class LockGate extends ConsumerStatefulWidget {
+  const LockGate({super.key, required this.child});
+  final Widget child;
+  @override
+  ConsumerState<LockGate> createState() => _LockGateState();
+}
+
+class _LockGateState extends ConsumerState<LockGate> with WidgetsBindingObserver {
+  /// Null until known, so nothing flashes before the keychain answers.
+  bool? _hasPin;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _checkPin();
+  }
+
+  void _checkPin() => PinStore.hasPin().then((v) => mounted ? setState(() => _hasPin = v) : null);
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    ref.read(obscureProvider.notifier).set(state != AppLifecycleState.resumed);
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+      ref.read(lockProvider.notifier).backgrounded();
+    } else if (state == AppLifecycleState.resumed) {
+      ref.read(lockProvider.notifier).resumed();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // The PIN is per sign-in: re-check after every auth change so a new user sets their own.
+    ref.listen(uidProvider, (_, _) => _checkPin());
+    final locked = ref.watch(lockProvider);
+    final obscured = ref.watch(obscureProvider);
+    final signedIn = ref.watch(authProvider).value?.session ?? db.auth.currentSession;
+    final hasPin = _hasPin;
+    return Stack(children: [
+      widget.child,
+      // Above every route so no content renders underneath on resume.
+      if (signedIn != null && hasPin != null && (locked || !hasPin))
+        Positioned.fill(
+          child: LiquidGlassLockScreen(
+            key: ValueKey(hasPin),
+            setup: !hasPin,
+            onDone: () {
+              ref.read(lockProvider.notifier).unlock();
+              setState(() => _hasPin = true);
+            },
+          ),
+        ),
+      // The lock screen already hides content; skip the blur so Face ID prompts don't flash it.
+      if (obscured && !locked) const Positioned.fill(child: PrivacyShield()),
+    ]);
+  }
+}
+
+/// Verify the current PIN (or Face ID) first, then the new-PIN pad, in one screen.
+void changePin(BuildContext context) {
+  var verified = false;
+  Navigator.of(context).push(MaterialPageRoute(
+    fullscreenDialog: true,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, set) => verified
+          ? LiquidGlassLockScreen(
+              key: const ValueKey('new'),
+              setup: true,
+              onCancel: () => Navigator.of(ctx).pop(),
+              onDone: () {
+                Navigator.of(ctx).pop();
+                showToast(context, 'PIN updated');
+              },
+            )
+          : LiquidGlassLockScreen(
+              key: const ValueKey('current'),
+              title: 'Enter current PIN',
+              onCancel: () => Navigator.of(ctx).pop(),
+              onDone: () => set(() => verified = true),
+            ),
+    ),
+  ));
 }
 
 /// Full-screen Face ID + 6-digit glass PIN gate. [setup] = create a PIN first.
@@ -173,21 +261,20 @@ class _LockState extends ConsumerState<LiquidGlassLockScreen> {
 
   Future<void> _biometric() async {
     setState(() => _bioPrompt = true);
-    biometricPrompt = true;
+    _biometricPrompt = true;
     var ok = false;
     try {
       ok = await _auth.authenticate(localizedReason: 'Unlock your subscriptions', biometricOnly: true);
     } catch (_) {
       // Dismissed / unavailable / locked-out → PIN pad.
     }
-    biometricPrompt = false;
+    _biometricPrompt = false;
     if (ok) return _unlocked();
     if (mounted) setState(() => _bioPrompt = false);
   }
 
   void _unlocked() {
     HapticFeedback.mediumImpact();
-    ref.read(lockProvider.notifier).unlock();
     widget.onDone?.call();
   }
 

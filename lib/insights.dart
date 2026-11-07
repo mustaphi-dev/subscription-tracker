@@ -6,28 +6,25 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import 'avatars.dart';
+import 'brands.dart';
 import 'data.dart';
-import 'home.dart';
+import 'tab_page.dart';
 import 'ui.dart';
 
-const _typeColors = {
-  'subscription': Color(0xFF3D7BFF),
-  'free_trial': kAccent,
-  'installment': kAmber,
-};
-const _typeNames = {'subscription': 'Subscriptions', 'free_trial': 'Trials (after conversion)', 'installment': 'Pay later'};
 
-class AnalyticsTab extends ConsumerWidget {
-  const AnalyticsTab({super.key});
+const _typeColors = {'subscription': kBlue, 'free_trial': kAccent, 'installment': kAmber, 'income': kMint};
+
+class InsightsTab extends ConsumerWidget {
+  const InsightsTab({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final base = ref.watch(baseCurrencyProvider).value ?? 'GBP';
-    final items = (ref.watch(itemsProvider).value ?? []).where((i) => i.status == 'active' || i.status == 'pending_confirmation').toList();
+    final base = ref.watch(baseProvider);
+    final items = ref.watch(liveItemsProvider);
     final sources = ref.watch(sourcesProvider).value ?? [];
     final outgoing = items.where((i) => i.type != 'income').toList();
-    final monthlyOut = outgoing.fold(0.0, (s, i) => s + i.monthlyBase);
-    final monthlyIn = items.where((i) => i.type == 'income').fold(0.0, (s, i) => s + i.monthlyBase);
+    final monthlyOut = items.monthlyOut, monthlyIn = items.monthlyIn;
 
     return TabPage(
       title: 'Insights',
@@ -107,7 +104,7 @@ class _ProjectedSpend extends StatelessWidget {
     final charges = chargesBetween(items, months.first, DateTime(now.year, now.month + 6, 1));
     final totals = [
       for (final m in months)
-        charges.where((c) => c.date.year == m.year && c.date.month == m.month).fold(0.0, (s, c) => s - c.amount),
+        charges.where((c) => DateUtils.isSameMonth(c.date, m)).spend,
     ];
     final maxY = max(totals.reduce(max), 1.0) * 1.2;
 
@@ -197,7 +194,7 @@ class _Runway extends StatelessWidget {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final charges = chargesBetween(items, today, today.add(const Duration(days: 31)));
-    var bal = sources.fold(0.0, (s, a) => s + (a.baseBalance ?? 0));
+    var bal = sources.totalBase;
     final spots = <FlSpot>[FlSpot(0, bal)];
     var low = (day: 0, value: bal);
     for (var d = 0; d <= 30; d++) {
@@ -293,7 +290,7 @@ class _RunwayPlaceholder extends ConsumerWidget {
           const SizedBox(width: 12),
           OutlinedButton(
             style: OutlinedButton.styleFrom(minimumSize: const Size(0, 40)),
-            onPressed: () => ref.read(tabProvider.notifier).set(2),
+            onPressed: () => goToTab(ref, AppTab.accounts),
             child: const Text('Connect'),
           ),
         ]),
@@ -327,7 +324,7 @@ class _BreakdownState extends State<_Breakdown> {
     final entries = groups.entries.where((e) => e.value > 0).toList()..sort((a, b) => b.value.compareTo(a.value));
     final total = entries.fold(0.0, (s, e) => s + e.value);
     Color colorOf(String k) => (byAccount ? accounts[k]?.color : _typeColors[k]) ?? kFaint;
-    String nameOf(String k) => (byAccount ? accounts[k]?.bank : _typeNames[k]) ?? 'Not assigned';
+    String nameOf(String k) => (byAccount ? accounts[k]?.bank : itemTypes[k]?.chart) ?? 'Not assigned';
     final focus = _touched != null && _touched! < entries.length ? entries[_touched!] : null;
 
     return _Card(
@@ -407,7 +404,7 @@ class _TopMerchants extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final top = [...items]..sort((a, b) => b.monthlyBase.compareTo(a.monthlyBase));
-    final maxV = top.isEmpty ? 1.0 : max(top.first.monthlyBase, 0.01);
+    final maxV = max(top.first.monthlyBase, 0.01);
     return _Card(
       title: 'Biggest commitments',
       child: Column(children: [

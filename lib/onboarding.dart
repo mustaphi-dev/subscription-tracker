@@ -2,37 +2,27 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 
 import 'brand_mark.dart';
+import 'data.dart' show storage;
 import 'stage.dart';
 import 'ui.dart';
 
 /// Has this device seen onboarding? Loaded before runApp so the router can redirect synchronously.
 final onboarded = ValueNotifier(false);
-const _storage = FlutterSecureStorage();
 
 /// Run with `--dart-define=REPLAY_ONBOARDING=true` to forget it on every launch, so the
 /// story can be tested again. Uninstalling isn't enough on iOS: the keychain keeps it.
 Future<void> loadOnboarded() async {
-  if (const bool.fromEnvironment('REPLAY_ONBOARDING')) await _storage.delete(key: 'onboarded');
-  onboarded.value = await _storage.read(key: 'onboarded') == 'yes';
+  if (const bool.fromEnvironment('REPLAY_ONBOARDING')) await storage.delete(key: 'onboarded');
+  onboarded.value = await storage.read(key: 'onboarded') == 'yes';
 }
 
 Future<void> finishOnboarding() async {
-  await _storage.write(key: 'onboarded', value: 'yes');
+  await storage.write(key: 'onboarded', value: 'yes');
   onboarded.value = true;
 }
-
-/// Eased 0→1 progress of [t] across the window [a, b].
-double _span(double t, double a, double b, [Curve curve = Curves.easeOutCubic]) => curve.transform(((t - a) / (b - a)).clamp(0.0, 1.0));
-
-/// Fade + rise driven by [r] (0 hidden, 1 in place).
-Widget _rise(double r, Widget child, {double dy = 16}) => Opacity(
-  opacity: r.clamp(0.0, 1.0),
-  child: Transform.translate(offset: Offset(0, (1 - r) * dy), child: child),
-);
 
 // ───────── Splash ─────────
 
@@ -113,16 +103,16 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
         final t = _intro.value, e = Curves.easeInCubic.transform(_exit.value);
         final size = math.min(MediaQuery.sizeOf(context).width * 0.5, 210.0);
 
-        final middle = _span(t, 0.04, 0.36);                                 // the middle of the W rises
-        final legs = _span(t, 0.26, _traced, Curves.easeInCubic);            // the cut legs slide in and land
-        final flinch = 1 - (2 * (t - _traced) / 0.16).abs().clamp(0.0, 1.0); // a quick squeeze on landing
-        final glow = _span(t, 0.2, _traced + 0.25);
-        final lift = _span(t, _traced, 0.9, Curves.easeInOutCubic);
+        final middle = span(t, 0.04, 0.36);
+        final legs = span(t, 0.26, _traced, Curves.easeInCubic);
+        final flinch = 1 - (2 * (t - _traced) / 0.16).abs().clamp(0.0, 1.0);
+        final glow = span(t, 0.2, _traced + 0.25);
+        final lift = span(t, _traced, 0.9, Curves.easeInOutCubic);
         final shift = Offset(0, -26 * lift);
 
         const word = 'Wince';
         final w0 = _traced + 0.02;
-        final wordIn = _span(t, w0, w0 + 0.34);
+        final wordIn = span(t, w0, w0 + 0.34);
 
         return IgnorePointer(
           ignoring: _leaving,
@@ -136,7 +126,6 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    // Soft light pooling behind the W.
                     Center(
                       child: Transform.translate(
                         offset: shift,
@@ -167,7 +156,7 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
                             middle: middle,
                             legs: legs,
                             flinch: flinch,
-                            sheen: _span(t, _traced - 0.06, _traced + 0.3, Curves.easeInOut),
+                            sheen: span(t, _traced - 0.06, _traced + 0.3, Curves.easeInOut),
                           ),
                         ),
                       ),
@@ -182,7 +171,7 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
                               for (var i = 0; i < word.length; i++)
                                 TextSpan(
                                   text: word[i],
-                                  style: TextStyle(color: Colors.white.withValues(alpha: _span(t, w0 + 0.022 * i, w0 + 0.022 * i + 0.14))),
+                                  style: TextStyle(color: Colors.white.withValues(alpha: span(t, w0 + 0.022 * i, w0 + 0.022 * i + 0.14))),
                                 ),
                             ],
                           ),
@@ -307,11 +296,10 @@ class _OnboardingState extends State<OnboardingScreen> with SingleTickerProvider
   }
 
   /// Horizontal flinch from [_flinch]: one small, fading swing.
-  ({double dx, double squeeze}) get _shudder {
+  double get _shudder {
     final f = _flinch.value;
-    if (f == 0 || f == 1) return (dx: 0, squeeze: 1);
-    final decay = math.pow(1 - f, 2).toDouble();
-    return (dx: math.sin(f * math.pi * 2) * 3 * decay, squeeze: 1);
+    if (f == 0 || f == 1) return 0;
+    return math.sin(f * math.pi * 2) * 3 * math.pow(1 - f, 2);
   }
 
   @override
@@ -364,35 +352,24 @@ class _OnboardingState extends State<OnboardingScreen> with SingleTickerProvider
               for (var i = 0; i < _pagesData.length; i++)
                 if ((pos - i).abs() < 1)
                   Opacity(
-                    opacity: (1 - (pos - i).abs()).clamp(0.0, 1.0) * _span(intro, 0, 0.5),
+                    opacity: (1 - (pos - i).abs()).clamp(0.0, 1.0) * span(intro, 0, 0.5),
                     child: Transform.translate(
-                      offset: Offset(i == lastIndex ? shudder.dx * 1.6 : 0, 0),
+                      offset: Offset(i == lastIndex ? shudder * 1.6 : 0, 0),
                       child: Transform.scale(
-                        scale: 1.03 - 0.03 * _span(intro, 0, 1),
+                        scale: 1.03 - 0.03 * span(intro, 0, 1),
                         child: StageScene(still: _pagesData[i].still, video: _videos[i], drop: _pagesData[i].drop),
                       ),
                     ),
                   ),
-              // Scrim so the type always reads, even on short phones.
-              IgnorePointer(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [kBg.withValues(alpha: 0), kBg.withValues(alpha: 0), kBg.withValues(alpha: 0.8), kBg],
-                      stops: const [0, 0.5, 0.74, 1],
-                    ),
-                  ),
-                ),
-              ),
+              // Deeper than sign-in's, so the bigger type reads even on short phones.
+              const StageScrim(from: 0.5, to: 0.74, alpha: 0.8),
               SafeArea(
                 child: Column(
                   children: [
                     Padding(
                       padding: const EdgeInsets.fromLTRB(28, 14, 28, 0),
                       child: Opacity(
-                        opacity: _span(intro, 0.3, 0.8),
+                        opacity: span(intro, 0.3, 0.8),
                         child: _Progress(pos: pos, count: _pagesData.length),
                       ),
                     ),
@@ -414,48 +391,44 @@ class _OnboardingState extends State<OnboardingScreen> with SingleTickerProvider
                             child: Padding(
                               padding: const EdgeInsets.fromLTRB(24, 0, 24, 30),
                               child: Transform.translate(
-                                offset: Offset(i == lastIndex ? shudder.dx : 0, 0),
-                                child: Transform.scale(
-                                  scale: i == lastIndex ? shudder.squeeze : 1,
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      ShaderMask(
-                                        // Bright at the top, melting into the scene at the bottom.
-                                        shaderCallback: (r) => LinearGradient(
-                                          begin: Alignment.topCenter,
-                                          end: Alignment.bottomCenter,
-                                          colors: [Colors.white, Colors.white.withValues(alpha: 0.62)],
-                                        ).createShader(r),
-                                        blendMode: BlendMode.modulate,
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            for (var k = 0; k < lines.length; k++)
-                                              _rise(
-                                                _span(t, 0.25 + 0.12 * k, 0.85 + 0.12 * k),
-                                                Text(
-                                                  lines[k],
-                                                  textAlign: TextAlign.center,
-                                                  style: display(42, weight: FontWeight.w500).copyWith(height: 1.08, letterSpacing: -1.7),
-                                                ),
-                                                dy: 22,
+                                offset: Offset(i == lastIndex ? shudder : 0, 0),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ShaderMask(
+                                      shaderCallback: (r) => LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [Colors.white, Colors.white.withValues(alpha: 0.62)],
+                                      ).createShader(r),
+                                      blendMode: BlendMode.modulate,
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          for (var k = 0; k < lines.length; k++)
+                                            rise(
+                                              span(t, 0.25 + 0.12 * k, 0.85 + 0.12 * k),
+                                              Text(
+                                                lines[k],
+                                                textAlign: TextAlign.center,
+                                                style: display(42, weight: FontWeight.w500).copyWith(height: 1.08, letterSpacing: -1.7),
                                               ),
-                                          ],
-                                        ),
+                                              dy: 22,
+                                            ),
+                                        ],
                                       ),
-                                      const SizedBox(height: 14),
-                                      _rise(
-                                        _span(t, 0.55, 1),
-                                        Text(
-                                          page.body,
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(color: kText.withValues(alpha: 0.58), fontSize: 15.5, height: 1.4, letterSpacing: -0.1),
-                                        ),
-                                        dy: 12,
+                                    ),
+                                    const SizedBox(height: 14),
+                                    rise(
+                                      span(t, 0.55, 1),
+                                      Text(
+                                        page.body,
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(color: kText.withValues(alpha: 0.58), fontSize: 15.5, height: 1.4, letterSpacing: -0.1),
                                       ),
-                                    ],
-                                  ),
+                                      dy: 12,
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
@@ -465,8 +438,8 @@ class _OnboardingState extends State<OnboardingScreen> with SingleTickerProvider
                     ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(24, 0, 24, 18),
-                      child: _rise(
-                        _span(intro, 0.45, 1),
+                      child: rise(
+                        span(intro, 0.45, 1),
                         SizedBox(
                           width: double.infinity,
                           height: 58,
@@ -498,7 +471,6 @@ class _OnboardingState extends State<OnboardingScreen> with SingleTickerProvider
   );
 }
 
-/// Story-style segments that fill continuously with the page position.
 class _Progress extends StatelessWidget {
   const _Progress({required this.pos, required this.count});
   final double pos;

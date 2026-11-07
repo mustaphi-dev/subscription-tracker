@@ -11,8 +11,9 @@ Deno.serve(async (req) => {
   const rows = Object.entries(body.rates as Record<string, number>).map(([target_currency, rate]) => ({
     base_currency: "USD", target_currency, rate, updated_at: now,
   }));
-  const { error } = await admin.from("fx_rates").upsert(rows);
+  const { error } = await admin().from("fx_rates").upsert(rows);
   if (error) return json({ error: error.message }, 500);
-  await admin.rpc("refresh_base_amounts");
+  const { error: rpcError } = await admin().rpc("refresh_base_amounts");
+  if (rpcError) return json({ error: rpcError.message }, 500);
   return json({ updated: rows.length });
 });
