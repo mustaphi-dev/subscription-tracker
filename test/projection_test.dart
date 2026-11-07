@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:subtracker/data.dart';
+import 'package:wince/data.dart';
 
 FinancialItem item(Map<String, dynamic> m) => FinancialItem({
       'id': m['merchant_name'],

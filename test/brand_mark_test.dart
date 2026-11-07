@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:subtracker/brand_mark_path.dart';
+import 'package:wince/brand_mark_path.dart';
 
 void main() {
   test('groove path sits inside the mark image and runs top to bottom', () {

@@ -1,4 +1,4 @@
-project_id = "subtracker"
+project_id = "wince"
 
 # Browser redirect from GoCardless and Postmark inbound webhook carry no Supabase JWT.
 # Both are authenticated inside the function (nonce lookup / shared secret).

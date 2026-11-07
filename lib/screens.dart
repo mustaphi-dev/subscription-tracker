@@ -1070,7 +1070,7 @@ class ConfirmTrialScreen extends ConsumerWidget {
   }
 }
 
-// ───────── Sign in (email magic link → subtracker://login-callback) ─────────
+// ───────── Sign in (email magic link → wince://login-callback) ─────────
 
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
@@ -1090,7 +1090,7 @@ class _SignInState extends State<SignInScreen> {
       _busy = true;
     });
     try {
-      await db.auth.signInWithOtp(email: _email.text.trim(), emailRedirectTo: 'subtracker://login-callback');
+      await db.auth.signInWithOtp(email: _email.text.trim(), emailRedirectTo: 'wince://login-callback');
       setState(() => _sent = true);
     } on AuthException catch (e) {
       setState(() => _error = e.message);

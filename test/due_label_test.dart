@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:subtracker/item_tile.dart';
-import 'package:subtracker/ui.dart';
+import 'package:wince/item_tile.dart';
+import 'package:wince/ui.dart';
 
 void main() {
   test('dueLabel rounds to calendar days, weeks and months', () {

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:subtracker/data.dart';
+import 'package:wince/data.dart';
 
 void main() {
   test('base currency is cleaned to an ISO code or falls back to GBP', () {

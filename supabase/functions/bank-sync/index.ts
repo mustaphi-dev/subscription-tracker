@@ -99,11 +99,11 @@ async function callback(req: Request) {
   const { externalId, status } = await byId(conn.aggregator)!.completeLink(conn.external_id, q);
   if (status !== "linked") {
     if (status !== "pending") await admin.from("bank_connections").update({ status }).eq("id", conn.id);
-    return Response.redirect("subtracker://bank-connected?status=failed", 302);
+    return Response.redirect("wince://bank-connected?status=failed", 302);
   }
   await admin.from("bank_connections").update({ status: "linked", external_id: externalId }).eq("id", conn.id);
   await syncUser(conn.user_id).catch(console.error);
-  return Response.redirect("subtracker://bank-connected", 302);
+  return Response.redirect("wince://bank-connected", 302);
 }
 
 async function syncUser(uid: string) {

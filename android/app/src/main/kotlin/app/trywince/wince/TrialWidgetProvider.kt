@@ -1,4 +1,4 @@
-package com.lovefist.subtracker
+package app.trywince.wince
 
 import android.appwidget.AppWidgetManager
 import android.content.Context

@@ -26,7 +26,7 @@ Future<void> main() async {
     publishableKey: const String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY',
         defaultValue: 'sb_publishable_MQvdhrt01UD9No8F5mo9HA_puUTELEP'),
   );
-  await HomeWidget.setAppGroupId('group.com.lovefist.subtracker');
+  await HomeWidget.setAppGroupId('group.app.trywince.wince');
   await loadOnboarded();
   runApp(const ProviderScope(child: App()));
 }
@@ -91,7 +91,7 @@ class _AppState extends ConsumerState<App> with WidgetsBindingObserver {
     // Anyone already signed in has effectively onboarded; don't show it after a later sign-out.
     if (db.auth.currentSession != null && !onboarded.value) finishOnboarding();
     initPush(router);
-    // Bank OAuth returns to subtracker://bank-connected.
+    // Bank OAuth returns to wince://bank-connected.
     _links = AppLinks().uriLinkStream.listen((uri) {
       if (uri.host != 'bank-connected') return;
       ref.invalidate(sourcesProvider);

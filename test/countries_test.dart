@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:subtracker/countries.dart';
+import 'package:wince/countries.dart';
 
 void main() {
   test('every country has a unique code, a flag and a known currency', () {

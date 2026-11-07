@@ -1,5 +1,5 @@
 // Add in Xcode: File ▸ New ▸ Target ▸ Widget Extension named "TrialWidget",
-// replace its Swift file with this one, and enable App Group "group.com.lovefist.subtracker"
+// replace its Swift file with this one, and enable App Group "group.app.trywince.wince"
 // on both Runner and TrialWidget targets.
 import SwiftUI
 import WidgetKit
@@ -19,7 +19,7 @@ struct Entry: TimelineEntry {
 
 struct Provider: TimelineProvider {
     func load() -> [Trial] {
-        let raw = UserDefaults(suiteName: "group.com.lovefist.subtracker")?.string(forKey: "trials") ?? "[]"
+        let raw = UserDefaults(suiteName: "group.app.trywince.wince")?.string(forKey: "trials") ?? "[]"
         return (try? JSONDecoder().decode([Trial].self, from: Data(raw.utf8))) ?? []
     }
     func placeholder(in context: Context) -> Entry {

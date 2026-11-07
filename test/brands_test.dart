@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:subtracker/brands.dart';
+import 'package:wince/brands.dart';
 
 void main() {
   String? domain(String n) => logoQuery(n)?.domain;
