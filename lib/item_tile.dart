@@ -138,7 +138,10 @@ class _ItemRowState extends ConsumerState<ItemRow> {
         final ok = await confirmCancel(context, i);
         if (ok != true) return false;
         await setItemStatus(i.id, 'cancelled');
-        if (context.mounted) showToast(context, '${i.merchant} marked as cancelled', closeSheets: false); // row is still animating out
+        if (context.mounted) {
+          showToast(context, '${i.merchant} marked as cancelled',
+              closeSheets: false, onUndo: () => setItemStatus(i.id, i.status)); // row is still animating out
+        }
         return true;
       },
       child: AnimatedSize(
@@ -212,7 +215,7 @@ class _ItemRowState extends ConsumerState<ItemRow> {
         _kv('Paid from', s == null ? 'Not assigned' : '${s.bank} · ${s.name}'),
         const SizedBox(height: 12),
         Row(children: [
-          Expanded(child: OutlinedButton(onPressed: () => _openCancel(i, s), child: Text(i.cancelUrl == null ? 'Open bank app' : 'Cancel at merchant'))),
+          Expanded(child: OutlinedButton(onPressed: () => _openCancel(i, s), child: Text(i.cancelUrl != null ? 'Cancel at merchant' : bankAppUrl(s) != null ? 'Open bank app' : 'How to cancel'))),
           const SizedBox(width: 8),
           Expanded(
             child: FilledButton(
@@ -222,7 +225,10 @@ class _ItemRowState extends ConsumerState<ItemRow> {
                 final confirm = i.status == 'pending_confirmation';
                 if (!confirm && !await confirmCancel(context, i)) return;
                 await setItemStatus(i.id, confirm ? 'active' : 'cancelled');
-                if (mounted) showToast(context, confirm ? 'Got it. We\'ll remind you before it starts charging.' : 'Trial cancelled. No more reminders.');
+                if (mounted) {
+                  showToast(context, confirm ? 'Got it. We\'ll remind you before it starts charging.' : 'Trial cancelled. No more reminders.',
+                      onUndo: confirm ? null : () => setItemStatus(i.id, i.status));
+                }
               },
               child: Text(i.status == 'pending_confirmation' ? 'Confirm trial' : 'Mark cancelled'),
             ),
@@ -244,15 +250,30 @@ class _ItemRowState extends ConsumerState<ItemRow> {
       ]);
 
   Future<void> _openCancel(FinancialItem i, PaymentSource? s) async {
-    const bankApps = {
-      'revolut': 'https://revolut.com/app',
-      'wise': 'https://wise.com/account',
-      'lloyds': 'https://www.lloydsbank.com/app.html',
-      'paypal': 'https://www.paypal.com/myaccount/autopay',
-    };
-    final url = i.cancelUrl ?? bankApps[s?.provider] ?? 'https://www.google.com/search?q=cancel+${Uri.encodeComponent(i.merchant)}';
+    final url = i.cancelUrl ?? bankAppUrl(s) ?? 'https://www.google.com/search?q=cancel+${Uri.encodeComponent(i.merchant)}';
     await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
   }
+}
+
+/// The bank's site for [s]; iOS hands it to the bank's app when that app claims the link.
+String? bankAppUrl(PaymentSource? s) {
+  const banks = {
+    'revolut': 'https://revolut.com/app',
+    'wise': 'https://wise.com/account',
+    'lloyds': 'https://www.lloydsbank.com/app.html',
+    'paypal': 'https://www.paypal.com/myaccount/autopay',
+    'monzo': 'https://monzo.com',
+    'starling': 'https://www.starlingbank.com',
+    'barclays': 'https://www.barclays.co.uk',
+    'hsbc': 'https://www.hsbc.co.uk',
+    'natwest': 'https://www.natwest.com',
+    'santander': 'https://www.santander.co.uk',
+    'halifax': 'https://www.halifax.co.uk',
+    'nationwide': 'https://www.nationwide.co.uk',
+  };
+  if (s == null) return null;
+  final who = '${s.provider} ${s.institution ?? ''}'.toLowerCase();
+  return banks.entries.where((b) => who.contains(b.key)).firstOrNull?.value;
 }
 
 /// Branded "are you sure" sheet. Marking cancelled only stops tracking, so the copy says so plainly.

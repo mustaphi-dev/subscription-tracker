@@ -352,10 +352,12 @@ class Segmented extends StatelessWidget {
   final ValueChanged<int> onSelect;
 
   @override
-  Widget build(BuildContext context) => Container(
+  // Same Liquid Glass and sliding pill as the bottom nav.
+  Widget build(BuildContext context) => Glass(
+        radius: 20,
+        child: Container(
         height: 40,
         padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(color: kSurface, borderRadius: BorderRadius.circular(20), border: Border.all(color: kLine)),
         child: LayoutBuilder(builder: (_, c) {
           final w = c.maxWidth / labels.length;
           return Stack(children: [
@@ -366,7 +368,7 @@ class Segmented extends StatelessWidget {
               width: w,
               top: 0,
               bottom: 0,
-              child: DecoratedBox(decoration: BoxDecoration(color: kSurfaceHi, borderRadius: BorderRadius.circular(16))),
+              child: DecoratedBox(decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(16))),
             ),
             Row(children: [
               for (var i = 0; i < labels.length; i++)
@@ -389,6 +391,7 @@ class Segmented extends StatelessWidget {
             ]),
           ]);
         }),
+        ),
       );
 }
 
@@ -464,7 +467,13 @@ Timer? _toastTimer;
 /// Success toasts also close any open bottom sheet (the action is done); errors pass
 /// [closeSheets] false so the user can fix their input.
 void showToast(BuildContext context, String message,
-    {Color tone = kText, IconData icon = CupertinoIcons.checkmark_circle_fill, Duration duration = const Duration(milliseconds: 2600), bool closeSheets = true}) {
+    {Color tone = kText,
+    IconData icon = CupertinoIcons.checkmark_circle_fill,
+    Duration? duration,
+    bool closeSheets = true,
+    VoidCallback? onUndo}) {
+  // Undo toasts stay longer and count down, so there's time to change your mind.
+  duration ??= onUndo == null ? const Duration(milliseconds: 2600) : const Duration(seconds: 5);
   _toastTimer?.cancel();
   _toast?.remove();
   final overlay = Overlay.of(context, rootOverlay: true);
@@ -510,6 +519,35 @@ void showToast(BuildContext context, String message,
                 Icon(icon, color: tone, size: 20),
                 const SizedBox(width: 12),
                 Expanded(child: Text(message, style: const TextStyle(fontSize: 14, height: 1.3))),
+                if (onUndo != null)
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      _toastTimer?.cancel();
+                      close();
+                      onUndo();
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 12),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        const Text('Undo', style: TextStyle(fontWeight: FontWeight.w700, color: kText)),
+                        const SizedBox(width: 10),
+                        TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 1, end: 0),
+                          duration: duration!,
+                          builder: (_, v, _) => SizedBox.square(
+                            dimension: 24,
+                            child: Stack(alignment: Alignment.center, children: [
+                              CircularProgressIndicator(value: v, strokeWidth: 2, color: kText, backgroundColor: kLine),
+                              Text('${(v * duration!.inSeconds).ceil()}',
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, fontFeatures: tabular)),
+                            ]),
+                          ),
+                        ),
+                      ]),
+                    ),
+                  ),
               ]),
             ),
           ),

@@ -1,9 +1,13 @@
+import 'dart:convert';
+
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'country.dart';
@@ -110,6 +114,8 @@ class _ProfileState extends ConsumerState<ProfileScreen> {
               row(CupertinoIcons.envelope, 'Email forwarding', () => context.push('/forwarding')),
               row(CupertinoIcons.lock, 'Security', () => showSheet(context, _Security(onChangePin: _changePin))),
               gap,
+              row(FontAwesomeIcons.shareFromSquare.data, 'Export data', () => showSheet(context, _Export(onPick: _export))),
+              gap,
               row(CupertinoIcons.chat_bubble, 'Support', () => launchUrl(Uri.parse('mailto:$kSupportEmail?subject=Wince%20support'))),
               row(CupertinoIcons.info, 'About', () => showSheet(context, const _About())),
               Padding(
@@ -128,6 +134,25 @@ class _ProfileState extends ConsumerState<ProfileScreen> {
         ),
       ),
     );
+  }
+
+  /// Everything tracked, as a CSV or Excel file through the share sheet (Files, Mail, Numbers…).
+  Future<void> _export(bool excel) async {
+    Navigator.of(context).pop();
+    try {
+      final rows = await db.from('financial_items').select().order('created_at');
+      final items = rows.map(FinancialItem.new).toList();
+      final name = 'wince-${DateFormat('y-MM-dd').format(DateTime.now())}.${excel ? 'xlsx' : 'csv'}';
+      await SharePlus.instance.share(ShareParams(
+        files: [
+          XFile.fromData(Uint8List.fromList(excel ? itemsXlsx(items) : utf8.encode(itemsCsv(items))),
+              mimeType: excel ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'text/csv'),
+        ],
+        fileNameOverrides: [name],
+      ));
+    } catch (e) {
+      if (mounted) showError(context, 'Couldn\'t export your data. Try again in a moment.', e);
+    }
   }
 
   /// Verify the current PIN (or Face ID) first, then swap in the new-PIN screen.
@@ -207,9 +232,49 @@ class _SecurityState extends State<_Security> {
             ),
           ),
           const SizedBox(height: 8),
-          Text('The app locks ${lockTimeout.inSeconds} seconds after you leave it.', style: caption),
+          Text('The app locks ${lockTimeout.inMinutes} minutes after you leave it.', style: caption),
         ]),
       );
+}
+
+/// Pick a file format for the export.
+class _Export extends StatelessWidget {
+  const _Export({required this.onPick});
+  final ValueChanged<bool> onPick; // true = Excel
+
+  @override
+  Widget build(BuildContext context) {
+    Widget option(FaIconData icon, String title, String sub, bool excel) => Pressable(
+          scale: 0.99,
+          onTap: () => onPick(excel),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Row(children: [
+              FaIcon(icon, size: 24, color: kText),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                  Text(sub, style: caption),
+                ]),
+              ),
+              const Icon(CupertinoIcons.chevron_right, size: 16, color: kFaint),
+            ]),
+          ),
+        );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Export data', style: display(22)),
+        const SizedBox(height: 4),
+        const Text('Everything you track, including cancelled items.', style: TextStyle(color: kMuted)),
+        const SizedBox(height: 8),
+        option(FontAwesomeIcons.fileLines, 'CSV', 'Open with Numbers and Google Sheets', false),
+        const Divider(height: 1, color: kLine),
+        option(FontAwesomeIcons.fileExcel, 'Excel', 'An .xlsx workbook for Microsoft Excel', true),
+      ]),
+    );
+  }
 }
 
 /// The app, in one sheet: what it is, and where the legal pages live.

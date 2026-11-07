@@ -16,7 +16,7 @@ import 'ui.dart';
 
 const _storage = FlutterSecureStorage();
 const _pinLength = 6;
-const lockTimeout = Duration(seconds: 15);
+const lockTimeout = Duration(minutes: 5);
 
 /// Salted SHA-256 PIN in Keychain / Keystore. Never leaves the device. It belongs to the
 /// account that set it: signing back in keeps it, a different account sets its own.

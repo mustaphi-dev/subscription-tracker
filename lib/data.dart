@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:excel/excel.dart';
 import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -282,3 +283,30 @@ Future<void> removeAccounts(Iterable<String> ids) async => await db.from('paymen
 Future<Map<String, dynamic>> parseReceipt(Map<String, dynamic> body) async =>
     (await db.functions.invoke('parse-trial-receipt', body: body)).data as Map<String, dynamic>;
 
+
+/// Every tracked item (cancelled ones too) as export rows, header first.
+List<List<Object?>> itemsTable(List<FinancialItem> items) => [
+      ['merchant', 'type', 'status', 'amount', 'currency', 'cycle', 'next_renewal', 'trial_end', 'post_trial_amount', 'total_spent', 'added'],
+      for (final i in items)
+        [i.merchant, i.type, i.status, i.amount, i.currency, i.cycle, i.nextRenewal, i.trialEnd, i.postTrialAmount, i.totalSpent, i.createdAt]
+            .map((v) => v is DateTime ? v.toIso8601String().substring(0, 10) : v)
+            .toList(),
+    ];
+
+String itemsCsv(List<FinancialItem> items) {
+  String cell(Object? v) {
+    final s = '${v ?? ''}';
+    return RegExp(r'[",\n\r]').hasMatch(s) ? '"${s.replaceAll('"', '""')}"' : s;
+  }
+
+  return itemsTable(items).map((r) => r.map(cell).join(',')).join('\n');
+}
+
+List<int> itemsXlsx(List<FinancialItem> items) {
+  final book = Excel.createExcel();
+  final sheet = book[book.getDefaultSheet()!];
+  for (final r in itemsTable(items)) {
+    sheet.appendRow([for (final v in r) v is num ? DoubleCellValue(v.toDouble()) : TextCellValue('${v ?? ''}')]);
+  }
+  return book.encode()!;
+}
