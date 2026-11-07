@@ -61,5 +61,14 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- "Open Gmail" after the magic link is sent (lib/mail_apps.dart): the mail apps
+             it can open straight to the inbox, and the phone's default mail app. -->
+        <package android:name="com.google.android.gm" />
+        <package android:name="com.microsoft.office.outlook" />
+        <package android:name="com.yahoo.mobile.client.android.mail" />
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.APP_EMAIL" />
+        </intent>
     </queries>
 </manifest>

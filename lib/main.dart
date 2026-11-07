@@ -17,6 +17,7 @@ import 'profile.dart';
 import 'push.dart';
 import 'forwarding.dart';
 import 'screens.dart';
+import 'signin.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -54,23 +55,38 @@ final router = GoRouter(
     if (!signedIn) {
       // First launch: welcome pages, then sign-in. Signed-in users never see onboarding.
       if (!onboarded.value) return at == '/welcome' ? null : '/welcome';
-      return at == '/signin' ? null : '/signin';
+      return at.startsWith('/signin') ? null : '/signin';
     }
+    // The email screen plays its "You're in" beat when the magic link lands, then moves on.
+    if (at == '/signin/email') return null;
     // New accounts pick where they bank before anything else.
     if (needsCountry.value) return at == '/country' ? null : '/country';
-    if (at == '/signin' || at == '/welcome' || at == '/country') return '/';
+    if (at.startsWith('/signin') || at == '/welcome' || at == '/country') return '/';
     return null;
   },
   routes: [
     GoRoute(path: '/', builder: (_, _) => const ShellScreen()),
-    GoRoute(path: '/welcome', builder: (_, _) => const OnboardingScreen()),
-    GoRoute(path: '/signin', builder: (_, _) => const SignInScreen()),
+    // Onboarding and sign-in share one stage, so they cross-fade instead of sliding.
+    GoRoute(path: '/welcome', pageBuilder: (_, s) => _stagePage(s, const OnboardingScreen())),
+    GoRoute(
+      path: '/signin',
+      pageBuilder: (_, s) => _stagePage(s, const SignInScreen()),
+      routes: [GoRoute(path: 'email', pageBuilder: (_, s) => _stagePage(s, const EmailScreen()))],
+    ),
     GoRoute(path: '/country', builder: (_, _) => const CountryScreen()),
     GoRoute(path: '/profile', builder: (_, _) => const ProfileScreen()),
     GoRoute(path: '/forwarding', builder: (_, _) => const ForwardingScreen()),
     GoRoute(path: '/upcoming', builder: (_, _) => const UpcomingScreen()),
     GoRoute(path: '/confirm/:id', builder: (_, s) => ConfirmTrialScreen(s.pathParameters['id']!)),
   ],
+);
+
+Page<void> _stagePage(GoRouterState s, Widget child) => CustomTransitionPage<void>(
+  key: s.pageKey,
+  child: child,
+  transitionDuration: const Duration(milliseconds: 450),
+  reverseTransitionDuration: const Duration(milliseconds: 350),
+  transitionsBuilder: (_, a, _, child) => FadeTransition(opacity: CurvedAnimation(parent: a, curve: Curves.easeOut), child: child),
 );
 
 class App extends ConsumerStatefulWidget {

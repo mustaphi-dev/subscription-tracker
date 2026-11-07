@@ -23,18 +23,44 @@ writes `assets/brand/w_left.webp`, `w_middle.webp` and `w_right.webp`, the white
 three layers on one square canvas, which the splash animates. Native launch screens are
 background colour only, so the splash starts from a dark screen.
 
-## Onboarding loops
+## The stage
 
-These are seamless loops at 960×1280 and 24 fps (frame N+1 equals frame 1).
+Every onboarding page and the sign-in screens share one backdrop, built by `stage.py`:
+violet light falling from the top left into `#07080C` (the app's `kBg`), a soft pool of
+light behind the object, and a few large, faint isometric blocks. It is measured in
+frame widths, so every 960-wide frame lines up when the app shows it full width and top
+aligned (`lib/stage.dart`). The bare plate is the app's backdrop:
 
-    python infinity.py  -- --w 960 --h 1280 --n 144 --samples 48 --dist 11.6 --cstr 11 --out frames/renewals
-    python hourglass.py -- --w 960 --h 1280 --n 144 --samples 56 --out frames/trials
-    python coin.py      -- --w 960 --h 1280 --n 120 --samples 64 --out frames/shortfalls
+    python3 stage.py --plate ../../assets/onboarding/stage.jpg
 
-    ./encode.sh frames/renewals   renewals   '#0B0A15' '#231A4A'
-    ./encode.sh frames/trials     trials     '#1E0A07' '#4A1A0C'
-    ./encode.sh frames/shortfalls shortfalls '#160708' '#3F0E10'
+The scenes render on a transparent film; `encode.sh` puts each frame on the stage,
+adds bloom, and writes the loop and its first frame to `assets/onboarding/`.
+
+## Onboarding and sign-in loops
+
+These are seamless loops at 960×1280 and 24 fps (frame N+1 equals frame 1). All the
+light in them is the stage's violet; the only other colour is the red cut in the coin.
+
+    python hourglass.py  -- --w 960 --h 1280 --n 144 --samples 56 --out frames/trials
+    python infinity.py   -- --w 960 --h 1280 --n 144 --samples 48 --dist 11.6 --cstr 11 --out frames/renewals
+    python coin.py       -- --w 960 --h 1280 --n 120 --samples 64 --out frames/shortfalls
+    python wince/w3d.py  -- --w 960 --h 1200 --n 120 --samples 48 --out frames/signin
+
+    PY=python3 ./encode.sh frames/trials     trials --sat 2.0
+    PY=python3 ./encode.sh frames/renewals   renewals
+    PY=python3 ./encode.sh frames/shortfalls shortfalls
+    PY=python3 ./encode.sh frames/signin     signin
+
+The hourglass sand glows violet. AgX mutes saturated violets toward pastel, so its
+frames get `--sat 2.0`, a chroma boost on the object before it goes on the stage.
+
+The sign-in W is extruded from the same `wince_logo.glyph()` geometry as the icon, in
+black lacquer with violet rim light. It sways slowly, and once per loop the cut legs
+ease out along their slant and settle back. Its frames are 1200 tall; the stage fills
+the rest of the 1280.
 
 `common.py` holds the shared scene helpers: materials, lights, studio world, camera and
 the render loop. Rendering skips frames that already exist, so you can restart an
 interrupted run with the same command. Expect roughly 15–40 s per frame on 4 CPU cores.
+For look tests, `BORDER=x0,y0,x1,y1` (fractions, y from the bottom) renders just that
+window.

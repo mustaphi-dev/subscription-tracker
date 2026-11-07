@@ -437,6 +437,11 @@ def key(ob, path, N, fn, index=None):
 
 def render(sc, out_dir, N, frames=None, still=None):
     os.makedirs(out_dir, exist_ok=True)
+    # BORDER=x0,y0,x1,y1 (fractions, y from the bottom) renders just that window, for look tests
+    if os.environ.get('BORDER'):
+        x0, y0, x1, y1 = (float(v) for v in os.environ['BORDER'].split(','))
+        sc.render.use_border, sc.render.use_crop_to_border = True, True
+        sc.render.border_min_x, sc.render.border_min_y, sc.render.border_max_x, sc.render.border_max_y = x0, y0, x1, y1
     if still is not None:
         sc.frame_set(still[0])
         sc.render.filepath = os.path.join(out_dir, still[1])

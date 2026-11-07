@@ -1,4 +1,4 @@
-"""Trials: a blown-glass hourglass in a chrome cage. Glowing sand drains for
+"""Trials: a blown-glass hourglass in a chrome cage. Glowing violet sand drains for
 most of the loop, then the whole hourglass is lifted, turned end over end and
 set down. The amounts are chosen so the flipped state equals the start
 state, so the loop is seamless: top bulb A, bottom bulb B, drain A-B, flip.
@@ -20,8 +20,9 @@ sc = reset()
 cycles(sc, W, H, samples=samples, glass_bounces=True)
 sc.render.fps = 24
 
-AMBER = (1.0, 0.30, 0.05)
-AMBER_HOT = (1.0, 0.62, 0.3)
+# violet like the rest of the Wince stage
+SAND = (0.36, 0.12, 1.0)
+SAND_HOT = (0.62, 0.42, 1.0)
 
 # ---------------------------------------------------------------- glass
 CP = [(0.0, 0.042), (0.05, 0.05), (0.13, 0.13), (0.27, 0.31), (0.42, 0.44),
@@ -65,13 +66,23 @@ sandm = bpy.data.materials.new('Sand')
 sandm.use_nodes = True
 nt = sandm.node_tree
 p = nt.nodes['Principled BSDF']
-p.inputs['Base Color'].default_value = (0.85, 0.22, 0.03, 1)
 p.inputs['Roughness'].default_value = 0.85
-p.inputs['Emission Color'].default_value = (*AMBER, 1)
-p.inputs['Emission Strength'].default_value = 0.65
+p.inputs['Emission Strength'].default_value = float(A.get('glow', 1.2))
 noise = nt.nodes.new('ShaderNodeTexNoise')
-noise.inputs['Scale'].default_value = 900.0
-noise.inputs['Detail'].default_value = 1.0
+noise.inputs['Scale'].default_value = 520.0
+noise.inputs['Detail'].default_value = 2.0
+# grains: deep violet and bright lilac mixed by fine noise, so the sand has texture and glow
+grain = nt.nodes.new('ShaderNodeMapRange')
+grain.inputs['From Min'].default_value = 0.3
+grain.inputs['From Max'].default_value = 0.7
+nt.links.new(noise.outputs['Fac'], grain.inputs['Value'])
+tone = nt.nodes.new('ShaderNodeMix')
+tone.data_type = 'RGBA'
+tone.inputs['A'].default_value = (0.10, 0.025, 0.62, 1)
+tone.inputs['B'].default_value = (0.52, 0.30, 1.0, 1)
+nt.links.new(grain.outputs['Result'], tone.inputs['Factor'])
+nt.links.new(tone.outputs['Result'], p.inputs['Base Color'])
+nt.links.new(tone.outputs['Result'], p.inputs['Emission Color'])
 bump = nt.nodes.new('ShaderNodeBump')
 bump.inputs['Strength'].default_value = 0.25
 bump.inputs['Distance'].default_value = 0.002
@@ -164,12 +175,12 @@ sand_u, (u1, u2) = sand_object('SandU', +1, [shape(+1, 'neck', VA), shape(+1, 'n
 sand_l, (l1, l2) = sand_object('SandL', -1, [shape(-1, 'cap', VB), shape(-1, 'cap', VA), shape(-1, 'neck', VA)])
 
 # stream: unit cylinder hanging from the neck, stretched to the pile each frame
-stream_m = emissive('Stream', AMBER_HOT, 5.0, base=AMBER)
+stream_m = emissive('Stream', SAND_HOT, 5.0, base=SAND)
 stream = lathe('Stream', [(0.0, 0.0), (0.0055, -0.002), (0.0045, -1.0), (0.0, -1.0)], segs=20)
 assign(stream, stream_m)
 
 # ---------------------------------------------------------------- cage
-chrome_m = chrome('Chrome', tint=(0.96, 0.92, 0.88), rough=0.05, rough_var=0.0)
+chrome_m = chrome('Chrome', tint=(0.93, 0.93, 0.96), rough=0.05, rough_var=0.0)
 CAP = [(0.0, -0.07), (0.62, -0.07), (0.66, -0.03), (0.66, 0.03), (0.62, 0.07),
        (0.30, 0.07), (0.28, 0.09), (0.0, 0.09)]
 CR = [0, 0.012, 0.03, 0.03, 0.012, 0.01, 0.01, 0]
@@ -197,14 +208,19 @@ for ob in parts:
 
 # ---------------------------------------------------------------- light
 world_studio([(0.0, 0.0), (0.47, 0.0), (0.53, 0.01), (0.56, 0.16), (0.59, 0.01), (0.85, 0.02),
-              (1.0, 0.05)], tint=(1.0, 0.86, 0.74), strength=1.0)
-softbox_card('BackL', (-2.2, 4.5, 0.4), (0, 0, 0), (0.45, 8), 4.0, color=(1.0, 0.9, 0.8))
-softbox_card('BackR', (2.6, 4.0, 0.2), (0, 0, 0), (0.3, 8), 3.0, color=(1.0, 0.55, 0.3))
+              (1.0, 0.05)], tint=(0.86, 0.84, 1.0), strength=1.0)
+softbox_card('BackL', (-2.2, 4.5, 0.4), (0, 0, 0), (0.45, 8), 4.0, color=(0.9, 0.9, 1.0))
+softbox_card('BackR', (2.6, 4.0, 0.2), (0, 0, 0), (0.3, 8), 3.0, color=(0.55, 0.45, 1.0))
 softbox_card('Top', (-0.8, -1.0, 6.5), (0, 0, 0), (5, 1.4), 1.0)
 softbox_card('Left', (-6.0, -2.0, 0.8), (0, 0, 0), (0.7, 7), 0.8)
-softbox_card('StripF', (2.8, -11.0, 2.0), (0, 0, 0), (0.25, 8), 0.9, color=(1.0, 0.85, 0.7))
-area('Warm', (0.0, -3.0, -2.5), (0, 0, 0), 40, size=(3, 1.5), color=(1.0, 0.5, 0.25))
+softbox_card('StripF', (2.8, -11.0, 2.0), (0, 0, 0), (0.25, 8), 0.9, color=(0.85, 0.82, 1.0))
+area('Under', (0.0, -3.0, -2.5), (0, 0, 0), 40, size=(3, 1.5), color=(0.45, 0.3, 1.0))
 sc.view_settings.exposure = float(A.get('ev', -0.2))
+# AgX washes saturated violets toward pastel; the punchy look keeps the sand rich
+try:
+    sc.view_settings.look = A.get('look', 'AgX - Punchy')
+except TypeError as e:
+    print('look', e)
 
 # ---------------------------------------------------------------- timing
 D0, D1 = 0.0, 0.58            # drain
