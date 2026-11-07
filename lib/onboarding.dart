@@ -212,8 +212,11 @@ class _SplashOverlayState extends State<SplashOverlay> with TickerProviderStateM
 // object on it and the words under it.
 
 class _Page {
-  const _Page(this.name, this.title, this.body);
+  const _Page(this.name, this.title, this.body, {this.drop = 0});
   final String name, title, body;
+
+  /// How far the object sits below the stage's usual spot, as a fraction of its height.
+  final double drop;
 
   /// First frame of the loop, shown instantly and whenever video can't play.
   String get still => 'assets/onboarding/$name.jpg';
@@ -223,7 +226,7 @@ class _Page {
 }
 
 const _pagesData = [
-  _Page('trials', 'It started with\na free trial.', 'Seven days, no charge. You\'d cancel in time.'),
+  _Page('trials', 'It started with\na free trial.', 'Seven days, no charge. You\'d cancel in time.', drop: 0.06),
   _Page('renewals', 'Then it quietly\nrenewed.', 'And again next month. And the one after that.'),
   _Page('shortfalls', 'Until it took\nyour last penny.', 'That feeling has a name.'),
 ];
@@ -366,7 +369,7 @@ class _OnboardingState extends State<OnboardingScreen> with SingleTickerProvider
                       offset: Offset(i == lastIndex ? shudder.dx * 1.6 : 0, 0),
                       child: Transform.scale(
                         scale: 1.03 - 0.03 * _span(intro, 0, 1),
-                        child: StageScene(still: _pagesData[i].still, video: _videos[i]),
+                        child: StageScene(still: _pagesData[i].still, video: _videos[i], drop: _pagesData[i].drop),
                       ),
                     ),
                   ),

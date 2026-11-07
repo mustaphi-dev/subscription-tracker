@@ -50,12 +50,16 @@ VideoPlayerController stageVideo(String asset, {bool play = true}) {
 /// A 3D scene on the stage, positioned exactly over [StagePlate]: its first frame as a
 /// still, with the loop faded in over it once frames are actually flowing.
 class StageScene extends StatelessWidget {
-  const StageScene({super.key, required this.still, this.video});
+  const StageScene({super.key, required this.still, this.video, this.drop = 0});
   final String still;
   final VideoPlayerController? video;
 
+  /// Moves the scene down by this fraction of the stage's height. Its top edge fades
+  /// out so the plate behind shows through without a seam.
+  final double drop;
+
   @override
-  Widget build(BuildContext context) => _staged(
+  Widget build(BuildContext context) => _staged(_dropped(
     Stack(
       fit: StackFit.expand,
       children: [
@@ -80,5 +84,21 @@ class StageScene extends StatelessWidget {
           ),
       ],
     ),
-  );
+  ));
+
+  Widget _dropped(Widget scene) => drop == 0
+      ? scene
+      : FractionalTranslation(
+          translation: Offset(0, drop),
+          child: ShaderMask(
+            blendMode: BlendMode.dstIn,
+            shaderCallback: (r) => LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: const [Colors.transparent, Colors.black],
+              stops: [0, drop * 2.5],
+            ).createShader(r),
+            child: scene,
+          ),
+        );
 }
