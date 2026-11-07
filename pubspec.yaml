@@ -56,6 +56,7 @@ dependencies:
   video_player: ^2.14.1
   country_picker: ^2.0.28
   android_intent_plus: ^6.1.0
+  font_awesome_flutter: ^11.0.0
 
 dev_dependencies:
   flutter_test:
