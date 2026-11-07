@@ -8,7 +8,7 @@ PaymentSource src(String provider, [String? institution]) =>
 void main() {
   test('bankAppUrl matches provider or institution name', () {
     expect(bankAppUrl(src('revolut')), 'https://revolut.com/app');
-    expect(bankAppUrl(src('ob-monzo', 'Monzo')), 'https://monzo.com');
+    expect(bankAppUrl(src('ob-monzo', 'Monzo')), 'https://www.monzo.com');
     expect(bankAppUrl(src('other', 'Unknown Credit Union')), isNull);
     expect(bankAppUrl(null), isNull);
   });

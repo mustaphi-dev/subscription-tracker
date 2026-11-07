@@ -27,35 +27,16 @@ class _CountryScreenState extends ConsumerState<CountryScreen> {
 
   bool get _editing => widget.current != null;
 
-  Future<bool> _askSwitch(Country c, String? base) async {
-    final ok = await showSheet<bool>(
+  Future<bool> _askSwitch(Country c, String? base) {
+    return confirmSheet(
       context,
-      Builder(
-        builder: (ctx) => Padding(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text(c.flag, style: const TextStyle(fontSize: 48)),
-            const SizedBox(height: 12),
-            Text('Show amounts in ${c.currency}?', textAlign: TextAlign.center, style: display(22)),
-            const SizedBox(height: 8),
-            Text(
-              'Totals are in ${base ?? 'your current currency'} now. Subscriptions keep their own currency either way.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: kMuted, height: 1.4),
-            ),
-            const SizedBox(height: 24),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text('Switch to ${c.currency}')),
-            const SizedBox(height: 4),
-            TextButton(
-              style: TextButton.styleFrom(foregroundColor: kText, minimumSize: const Size.fromHeight(48)),
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text('Keep ${base ?? 'current'}', style: const TextStyle(fontWeight: FontWeight.w600)),
-            ),
-          ]),
-        ),
-      ),
+      leading: Text(c.flag, style: const TextStyle(fontSize: 48)),
+      title: 'Show amounts in ${c.currency}?',
+      body: 'Totals are in ${base ?? 'your current currency'} now. Subscriptions keep their own currency either way.',
+      action: 'Switch to ${c.currency}',
+      keep: 'Keep ${base ?? 'current'}',
+      danger: false,
     );
-    return ok == true;
   }
 
   @override

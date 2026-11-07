@@ -1,13 +1,11 @@
 // Open Banking account linking. The provider for each country lives in ./aggregators.
 // Routes: POST /banks, POST /connect, POST /sync, POST /disconnect (user); GET /callback (browser redirect); POST /sync-all (cron).
 import { admin, env, isServiceCall, json, money, sendPush, userFrom } from "../_shared/mod.ts";
-import { enableBanking } from "./aggregators/enablebanking.ts";
 import { trueLayer } from "./aggregators/truelayer.ts";
-import { gocardless } from "./aggregators/gocardless.ts";
 import type { Aggregator, Txn } from "./aggregators/types.ts";
 
 // New links use the first provider covering the user's country; older links keep their own.
-const AGGREGATORS: Aggregator[] = [trueLayer, enableBanking, gocardless];
+const AGGREGATORS: Aggregator[] = [trueLayer];
 const byId = (id: string) => AGGREGATORS.find((a) => a.id === id);
 const forCountry = (c: string | null) => AGGREGATORS.find((a) => c != null && a.countries.includes(c));
 

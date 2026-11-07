@@ -567,6 +567,51 @@ void showError(BuildContext context, String message, [Object? error]) {
   showToast(context, message, tone: kCrimson, icon: CupertinoIcons.exclamationmark_circle, duration: const Duration(seconds: 4), closeSheets: false);
 }
 
+/// Fades a widget in while it rises [rise] of its height into place, once, when first built.
+extension FadeRise on Widget {
+  Widget fadeRise({int ms = 300, double rise = 0.04}) => TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: Duration(milliseconds: ms),
+        builder: (_, t, child) => Opacity(
+          opacity: t,
+          child: FractionalTranslation(translation: Offset(0, rise * (1 - springOut.transform(t))), child: child),
+        ),
+        child: this,
+      );
+}
+
+/// "Are you sure" sheet: [leading] art, a question and two choices. True when [action] is tapped.
+Future<bool> confirmSheet(BuildContext context,
+    {Widget? leading, required String title, required String body, required String action, String keep = 'Keep it', bool danger = true}) async {
+  final ok = await showSheet<bool>(
+    context,
+    Builder(
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          if (leading != null) ...[leading, const SizedBox(height: 16)],
+          Text(title, textAlign: TextAlign.center, style: display(22)),
+          const SizedBox(height: 8),
+          Text(body, textAlign: TextAlign.center, style: const TextStyle(color: kMuted, height: 1.4)),
+          const SizedBox(height: 24),
+          FilledButton(
+            style: danger ? FilledButton.styleFrom(backgroundColor: kCrimson, foregroundColor: Colors.white) : null,
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(action),
+          ),
+          const SizedBox(height: 4),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: kText, minimumSize: const Size.fromHeight(48)),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(keep, style: const TextStyle(fontWeight: FontWeight.w600)),
+          ),
+        ]),
+      ),
+    ),
+  );
+  return ok == true;
+}
+
 /// Solid bottom sheet with a grab handle.
 Future<T?> showSheet<T>(BuildContext context, Widget child) => showModalBottomSheet<T>(
       context: context,

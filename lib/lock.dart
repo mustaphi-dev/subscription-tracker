@@ -6,7 +6,6 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
@@ -102,8 +101,12 @@ Future<void> signOut({bool resetPin = false}) async {
 class ObscureController extends Notifier<bool> {
   @override
   bool build() => false;
-  void set(bool v) => state = v;
+  // Our own Face ID sheet makes the app inactive too; don't blur behind it.
+  void set(bool v) => state = v && !biometricPrompt;
 }
+
+/// True while the Face ID sheet is up.
+bool biometricPrompt = false;
 
 final obscureProvider = NotifierProvider<ObscureController, bool>(ObscureController.new);
 
@@ -151,6 +154,9 @@ class _LockState extends ConsumerState<LiquidGlassLockScreen> {
   bool _bioAvailable = false;
   bool _forgot = false; // showing the "sign out to reset" confirmation
 
+  /// Face ID is being tried: show only the backdrop, so success goes straight to the app.
+  late bool _bioPrompt = !widget.setup;
+
   @override
   void initState() {
     super.initState();
@@ -162,16 +168,21 @@ class _LockState extends ConsumerState<LiquidGlassLockScreen> {
     final can = await _auth.canCheckBiometrics && await _auth.isDeviceSupported();
     if (!mounted) return;
     setState(() => _bioAvailable = enabled && can);
-    if (_bioAvailable) _biometric();
+    _bioAvailable ? _biometric() : setState(() => _bioPrompt = false);
   }
 
   Future<void> _biometric() async {
+    setState(() => _bioPrompt = true);
+    biometricPrompt = true;
+    var ok = false;
     try {
-      final ok = await _auth.authenticate(localizedReason: 'Unlock your subscriptions', biometricOnly: true);
-      if (ok) _unlocked();
+      ok = await _auth.authenticate(localizedReason: 'Unlock your subscriptions', biometricOnly: true);
     } catch (_) {
-      // Dismissed / unavailable / locked-out → PIN pad stays.
+      // Dismissed / unavailable / locked-out → PIN pad.
     }
+    biometricPrompt = false;
+    if (ok) return _unlocked();
+    if (mounted) setState(() => _bioPrompt = false);
   }
 
   void _unlocked() {
@@ -228,6 +239,7 @@ class _LockState extends ConsumerState<LiquidGlassLockScreen> {
   @override
   Widget build(BuildContext context) {
     final title = widget.setup ? (_firstPin == null ? 'Create a 6-digit PIN' : 'Confirm your PIN') : widget.title ?? 'Enter PIN';
+    if (_bioPrompt) return const Material(color: Colors.transparent, child: Ambient(child: SizedBox.expand()));
     return Material(
       color: Colors.transparent,
       child: Ambient(
@@ -244,7 +256,13 @@ class _LockState extends ConsumerState<LiquidGlassLockScreen> {
             const SizedBox(height: 24),
             Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
             const SizedBox(height: 24),
-            Row(
+            // Wrong PIN: the dots shake side to side, fading out.
+            TweenAnimationBuilder<double>(
+              key: ValueKey(_shake),
+              tween: Tween(begin: _shake > 0 ? 0 : 1, end: 1),
+              duration: const Duration(milliseconds: 400),
+              builder: (_, t, child) => Transform.translate(offset: Offset(sin(t * pi * 4.8) * 10 * (1 - t), 0), child: child),
+              child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(_pinLength, (i) {
                 final filled = i < _pin.length;
@@ -261,9 +279,8 @@ class _LockState extends ConsumerState<LiquidGlassLockScreen> {
                   ),
                 );
               }),
-            )
-                .animate(key: ValueKey(_shake), autoPlay: _shake > 0)
-                .shakeX(hz: 6, amount: 10, duration: 400.ms),
+            ),
+            ),
             SizedBox(
               height: 32,
               child: Center(
