@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="trial_widget_label">Upcoming Charges</string>
+    <string name="trial_widget_description">Countdown to your next trial and subscription charges.</string>
+</resources>
